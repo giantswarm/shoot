@@ -94,8 +94,7 @@ agent = Agent(
     ),
 )
 
-
-def debug_print(message):
+def debug_print(result):
     print("🧠 Agent's Thought Process & Actions:")
     print("=" * 80)
     messages = result.all_messages()

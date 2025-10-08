@@ -1,39 +1,44 @@
-# Use Python 3.13 slim image as base
-FROM python:3.13-slim
+# Build stage
+FROM golang:1.24-alpine AS builder
 
-# Install Node.js and bash (required for npx and MCP servers)
-RUN apt-get update && apt-get install -y \
-    curl \
-    gnupg \
-    bash \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+# Install build dependencies
+RUN apk add --no-cache git
 
-# Download and install mcp-kubernetes binary (latest v0.0.35)
-# RUN curl -L https://github.com/containers/kubernetes-mcp-server/releases/download/v0.0.52/kubernetes-mcp-server-linux-amd64 -o /usr/local/bin/mcp-kubernetes \
-#     && chmod +x /usr/local/bin/mcp-kubernetes
+# Set working directory
+WORKDIR /build
 
-COPY mcp-kubernetes /usr/local/bin/mcp-kubernetes
-RUN chmod +x /usr/local/bin/mcp-kubernetes
+# Copy go mod files
+COPY go.mod go.sum ./
+
+# Copy source code
+COPY main.go .
+
+# Build the application
+RUN CGO_ENABLED=0 GOOS=linux go build -o shoot main.go
+
+# Runtime stage
+FROM alpine:latest
+
+# Install ca-certificates for HTTPS requests
+RUN apk --no-cache add ca-certificates
 
 # Set working directory
 WORKDIR /app
 
-# Copy requirements file
-COPY requirements.txt .
+# Copy the binary from builder
+COPY --from=builder /build/shoot .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy mcp-kubernetes binary
+COPY mcp-kubernetes ./mcp-kubernetes
+RUN chmod +x ./mcp-kubernetes
 
-# Copy application files
-COPY main.py .
+# Copy kubeconfig
+COPY kubeconfig.yaml .
 
-# Set environment variable for API key (can be overridden at runtime)
+# Set environment variables
 ENV OPENAI_API_KEY=""
 ENV KUBECONFIG=/app/kubeconfig.yaml
 
 # Run the application
-CMD ["python", "main.py"]
+CMD ["./shoot"]
 

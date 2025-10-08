@@ -1,3 +1,6 @@
 venv
 kubeconfig.yaml
 mcp-kubernetes
+shoot
+.genkit
+.vscode

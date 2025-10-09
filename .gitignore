@@ -1,3 +1,5 @@
 venv
 kubeconfig.yaml
-mcp-kubernetes
+mcp-kubernetes*
+mydb.sqlite
+mlartifacts

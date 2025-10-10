@@ -34,10 +34,9 @@ RUN MCP_VERSION=0.0.36 && arch=$(uname -m) && \
 #Final image
 FROM python:3.13-slim AS release 
 COPY --from=builder-py /usr/local /usr/local
-COPY --from=builder-py /build/mcp-kubernetes /build/mcp-kubernetes
-
+RUN mkdir /app
 WORKDIR /app
-
+COPY --from=builder-py /build/mcp-kubernetes /app/mcp-kubernetes
 COPY main.py .
 
 CMD ["python", "main.py"]

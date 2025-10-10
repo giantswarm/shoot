@@ -1,2 +1,1 @@
 dspy[mcp]
-mlflow

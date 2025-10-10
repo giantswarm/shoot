@@ -5,9 +5,6 @@ import json
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 import dspy
-import mlflow
-
-
 
 # Ensure KUBECONFIG is set and passed to the subprocess
 env = os.environ.copy()
@@ -104,12 +101,8 @@ async def run(user_request):
 if __name__ == "__main__":
     import asyncio
 
-    if os.getenv("MLFLOW_TRACKING_URI"):
-        mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI"))
-        mlflow.set_experiment("shoot")    
-        mlflow.dspy.autolog()
-
     dspy.configure(lm=dspy.LM("openai/gpt-5", temperature=1.0, max_tokens=16000))
 
     asyncio.run(run("check which pods have restarted in the kube-system namespace"))
 
+    dspy.inspect_history()

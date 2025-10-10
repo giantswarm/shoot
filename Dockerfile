@@ -1,22 +1,9 @@
-FROM python:3.13-slim AS builder-py
+FROM python:3.13-alpine AS builder-py
 
 RUN mkdir /build
 WORKDIR /build
 
-# Install uv 
-RUN --mount=type=cache,target=/root/.cache,id=pip \
-    python -m pip install uv 
-
-COPY requirements.txt .
-
-RUN --mount=type=cache,target=/root/.cache,id=pip \
-    uv pip install --system -r /build/requirements.txt
-
-# Install Node.js and bash (required for npx and MCP servers)
-RUN apt-get update && apt-get install -y \
-    curl \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache curl
 
 # Download and install mcp-kubernetes binary (latest v0.0.35)
 RUN MCP_VERSION=0.0.36 && arch=$(uname -m) && \
@@ -30,12 +17,21 @@ RUN MCP_VERSION=0.0.36 && arch=$(uname -m) && \
     curl -L $MCP_URL -o /build/mcp-kubernetes \
     && chmod +x /build/mcp-kubernetes
 
+# Install uv and dependencies
+RUN --mount=type=cache,target=/root/.cache,id=pip \
+    python -m pip install uv 
+
+COPY requirements.txt .
+
+RUN --mount=type=cache,target=/root/.cache,id=pip \
+    uv pip install --system -r /build/requirements.txt
 
 #Final image
-FROM python:3.13-slim AS release 
+FROM python:3.13-alpine AS release 
 COPY --from=builder-py /usr/local /usr/local
 RUN mkdir /app
 WORKDIR /app
+#COPY kubeconfig.yaml .
 COPY --from=builder-py /build/mcp-kubernetes /app/mcp-kubernetes
 COPY main.py .
 

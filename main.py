@@ -8,7 +8,7 @@ import dspy
 
 # Ensure KUBECONFIG is set and passed to the subprocess
 env = os.environ.copy()
-env['KUBECONFIG'] = env.get('KUBECONFIG', '/app/kubeconfig.yaml')
+env['KUBECONFIG'] = env.get('KUBECONFIG', '/home/app/kubeconfig.yaml')
 
 # Create server parameters for stdio connection
 kubernetes_mcp = StdioServerParameters(

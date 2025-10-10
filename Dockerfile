@@ -33,15 +33,15 @@ FROM python:3.13-alpine AS release
 RUN addgroup -g 10001 app && adduser -D -H -u 10001 -G app app
 
 COPY --from=builder-py /usr/local /usr/local
-RUN mkdir /app
-WORKDIR /app
+RUN mkdir -p /home/app
+WORKDIR /home/app
 
 # Copy binary and app files, then fix ownership and permissions
-COPY --from=builder-py /build/mcp-kubernetes /app/mcp-kubernetes
+COPY --from=builder-py /build/mcp-kubernetes /home/app/mcp-kubernetes
 COPY main.py .
 
-RUN chown -R 10001:10001 /app && \
-    chmod 0755 /app/mcp-kubernetes
+RUN chown -R 10001:10001 /home/app && \
+    chmod 0755 /home/app/mcp-kubernetes
 
 # Switch to non-root user
 USER 10001:10001

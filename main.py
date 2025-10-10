@@ -13,7 +13,7 @@ env['KUBECONFIG'] = env.get('KUBECONFIG', '/app/kubeconfig.yaml')
 # Create server parameters for stdio connection
 kubernetes_mcp = StdioServerParameters(
     command="./mcp-kubernetes",  # Executable
-    args=["serve"],
+    args=["serve", "--non-destructive"],
     env=env,
 )
 
@@ -95,7 +95,7 @@ async def run(user_request):
             react = dspy.ReAct(DebuggingAgent, tools=dspy_tools)
 
             result = await react.acall(user_request=user_request)
-            print(result)
+            #print(result)
 
 
 if __name__ == "__main__":
@@ -105,4 +105,4 @@ if __name__ == "__main__":
 
     asyncio.run(run("check which pods have restarted in the kube-system namespace"))
 
-    dspy.inspect_history()
+    dspy.inspect_history(n=0)

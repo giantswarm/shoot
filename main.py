@@ -95,7 +95,6 @@ async def run(user_request):
             react = dspy.ReAct(DebuggingAgent, tools=dspy_tools)
 
             result = await react.acall(user_request=user_request)
-            #print(result)
 
 
 if __name__ == "__main__":
@@ -103,6 +102,6 @@ if __name__ == "__main__":
 
     dspy.configure(lm=dspy.LM("openai/gpt-5", temperature=1.0, max_tokens=16000))
 
-    asyncio.run(run("check which pods have restarted in the kube-system namespace"))
+    asyncio.run(run(os.getenv("QUERY")))
 
     dspy.inspect_history(n=0)

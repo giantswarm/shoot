@@ -26,23 +26,26 @@ spec:
             seccompProfile:
               type: RuntimeDefault
           env:
+            - name: DEBUG
+              value: "true"
+            - name: QUERY
+              value: "${QUERY}"
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: openai-api-key
                   key: OPENAI_API_KEY
             - name: KUBECONFIG
-              value: /app/kubeconfig.yaml
+              value: /home/app/k8s/kubeconfig.yaml
           volumeMounts:
             - name: kubeconfig
-              mountPath: /app/kubeconfig.yaml
-              subPath: kubeconfig.yaml
+              mountPath: /home/app/k8s
       volumes:
         - name: kubeconfig
           secret:
-            secretName: kubeconfig-${CLUSTERNAME}
+            secretName: ${CLUSTERNAME}-kubeconfig
             items:
-              - key: kubeconfig.yaml
+              - key: value
                 path: kubeconfig.yaml
 
 

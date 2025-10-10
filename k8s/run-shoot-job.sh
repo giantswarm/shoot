@@ -3,9 +3,10 @@ set -euo pipefail
 
 NS=${1:-}
 CLUSTER=${2:-}
+QUERY_ARG=${3:-}
 IMAGE=${IMAGE:-}
 if [[ -z "$NS" || -z "$CLUSTER" ]]; then
-  echo "usage: $0 <namespace> <clustername>" >&2
+  echo "usage: $0 <namespace> <clustername> [query]" >&2
   echo "hint: export IMAGE=ghcr.io/you/shoot:latest (or similar)" >&2
   exit 2
 fi
@@ -17,7 +18,11 @@ fi
 JOB=shoot-$(date +%s)
 
 # Render and apply the Job
-export NAMESPACE="$NS" CLUSTERNAME="$CLUSTER" JOB_NAME="$JOB"
+if [[ -z "${QUERY_ARG}" ]]; then
+  QUERY_ARG="list namespaces"
+fi
+
+export NAMESPACE="$NS" CLUSTERNAME="$CLUSTER" JOB_NAME="$JOB" QUERY="$QUERY_ARG"
 envsubst < k8s/job.shoot.yaml.tpl | kubectl apply -f -
 
 # Actively watch for Complete or Failed (exit immediately on either), 20m timeout

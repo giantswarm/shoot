@@ -1,8 +1,22 @@
-# Use Python 3.13 slim image as base
-FROM python:3.13-slim
+FROM python:3.13-slim AS builder-py
 
-# Set working directory
-WORKDIR /app
+RUN mkdir /build
+WORKDIR /build
+
+# Install uv 
+RUN --mount=type=cache,target=/root/.cache,id=pip \
+    python -m pip install uv 
+
+COPY requirements.txt .
+
+RUN --mount=type=cache,target=/root/.cache,id=pip \
+    uv pip install --system -r /build/requirements.txt
+
+# Install Node.js and bash (required for npx and MCP servers)
+RUN apt-get update && apt-get install -y \
+    curl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Download and install mcp-kubernetes binary (latest v0.0.35)
 RUN MCP_VERSION=0.0.36 && arch=$(uname -m) && \
@@ -13,18 +27,18 @@ RUN MCP_VERSION=0.0.36 && arch=$(uname -m) && \
     else \
       echo "Unsupported architecture: $arch" && exit 1; \
     fi && \
-    curl -L $MCP_URL -o /app/mcp-kubernetes \
-    && chmod +x /app/mcp-kubernetes
+    curl -L $MCP_URL -o /build/mcp-kubernetes \
+    && chmod +x /build/mcp-kubernetes
 
-# Copy requirements file
-COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+#Final image
+FROM python:3.13-slim AS release 
+COPY --from=builder-py /usr/local /usr/local
+COPY --from=builder-py /build/mcp-kubernetes /build/mcp-kubernetes
 
-# Copy application files
+WORKDIR /app
+
 COPY main.py .
 
-# Run the application
 CMD ["python", "main.py"]
 

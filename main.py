@@ -104,9 +104,10 @@ async def run(user_request):
 if __name__ == "__main__":
     import asyncio
 
-    mlflow.set_tracking_uri("http://localhost:5051")
-    mlflow.set_experiment("debugging-agent")    
-    mlflow.dspy.autolog()
+    if os.getenv("MLFLOW_TRACKING_URI"):
+        mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI"))
+        mlflow.set_experiment("shoot")    
+        mlflow.dspy.autolog()
 
     dspy.configure(lm=dspy.LM("openai/gpt-5", temperature=1.0, max_tokens=16000))
 

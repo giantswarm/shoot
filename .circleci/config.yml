@@ -1,0 +1,18 @@
+version: 2.1
+orbs:
+  architect: giantswarm/architect@6.7.0
+
+workflows:
+  package-and-push-chart-on-tag:
+    jobs:
+    - architect/push-to-registries:
+        context: architect
+        name: push-to-registries
+        filters:
+          tags:
+            only: /^v.*/
+
+          branches:
+            ignore:
+            - main
+            - master

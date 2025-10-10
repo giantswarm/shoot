@@ -20,16 +20,33 @@ JOB=shoot-$(date +%s)
 export NAMESPACE="$NS" CLUSTERNAME="$CLUSTER" JOB_NAME="$JOB"
 envsubst < k8s/job.shoot.yaml.tpl | kubectl apply -f -
 
-# Wait for completion or failure (20m timeout)
-if ! kubectl -n "$NS" wait --for=condition=complete --timeout=1200s job/"$JOB" 2>/dev/null; then
-  echo "Job did not complete successfully; showing status and logs" >&2
-  kubectl -n "$NS" describe job "$JOB" || true
-  # print logs even on failure
-  kubectl -n "$NS" logs job/"$JOB" --all-containers=true --tail=-1 || true
-  exit 1
-fi
+# Actively watch for Complete or Failed (exit immediately on either), 20m timeout
+deadline=$(( $(date +%s) + 1200 ))
+while true; do
+  # Query conditions; tolerate transient lookup errors
+  complete=$(kubectl -n "$NS" get job "$JOB" -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}' 2>/dev/null || true)
+  failed=$(kubectl -n "$NS" get job "$JOB" -o jsonpath='{.status.conditions[?(@.type=="Failed")].status}' 2>/dev/null || true)
 
-# Print logs on success
-kubectl -n "$NS" logs job/"$JOB" --all-containers=true --tail=-1
+  if [[ "$failed" == "True" ]]; then
+    echo "Job failed; showing status and logs" >&2
+    kubectl -n "$NS" describe job "$JOB" || true
+    kubectl -n "$NS" logs job/"$JOB" --all-containers=true --tail=-1 || true
+    exit 1
+  fi
+
+  if [[ "$complete" == "True" ]]; then
+    kubectl -n "$NS" logs job/"$JOB" --all-containers=true --tail=-1 || true
+    exit 0
+  fi
+
+  if [[ $(date +%s) -ge $deadline ]]; then
+    echo "Timeout waiting for job to complete or fail; showing status and logs" >&2
+    kubectl -n "$NS" describe job "$JOB" || true
+    kubectl -n "$NS" logs job/"$JOB" --all-containers=true --tail=-1 || true
+    exit 1
+  fi
+
+  sleep 3
+done
 
 

@@ -7,6 +7,6 @@ kubectl -n "$NAMESPACE" create secret generic kubeconfig-"$CLUSTERNAME" \
   --from-file=kubeconfig.yaml=./kubeconfig.yaml
 kubectl -n "$NAMESPACE" create secret generic openai-api-key \
   --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY"
-export IMAGE=gsoci.azurecr.io/giantswarm/shoot:0.0.0-45c96e2dc13965ecd1939bd27c33870ec3df8547
+export IMAGE=gsoci.azurecr.io/giantswarm/shoot:0.0.0-818a3e298ef5e51fbaae2cb5b93ef2b7d592aa3c
 bash k8s/run-shoot-job.sh "$NAMESPACE" "$CLUSTERNAME"
 ```

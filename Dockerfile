@@ -40,7 +40,7 @@ WORKDIR /app
 COPY --from=builder-py /build/mcp-kubernetes /app/mcp-kubernetes
 COPY main.py .
 
-RUN chown -R app:app /app && \
+RUN chown -R 10001:10001 /app && \
     chmod 0755 /app/mcp-kubernetes
 
 # Switch to non-root user

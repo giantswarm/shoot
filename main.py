@@ -6,15 +6,14 @@ from pydantic_ai.models.openai import OpenAIResponsesModel, OpenAIResponsesModel
 import logfire
 
 # Ensure KUBECONFIG is set and passed to the subprocess
-env = os.environ.copy()
-env['KUBECONFIG'] = env.get('KUBECONFIG', '/app/kubeconfig.yaml')
+os.environ['KUBECONFIG'] = os.environ.get('KUBECONFIG', '/app/kubeconfig.yaml')
 
 # Configure MCP server
-kubernetes_server = MCPServerStdio('/usr/local/bin/mcp-kubernetes', args=['serve'], env=env, tool_prefix='workload_cluster')
+kubernetes_server = MCPServerStdio('/usr/local/bin/mcp-kubernetes', args=['--kubeconfig', os.environ['KUBECONFIG'], '--read-only'], env=os.environ, tool_prefix='workload_cluster')
 
 # Configure OTEL for logging
-os.environ['OTEL_EXPORTER_OTLP_ENDPOINT'] = env.get('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4318')  
-os.environ['OTEL_RESOURCE_ATTRIBUTES'] = env.get('OTEL_RESOURCE_ATTRIBUTES', 'service.name=shoot')
+os.environ['OTEL_EXPORTER_OTLP_ENDPOINT'] = os.environ.get('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4318')  
+os.environ['OTEL_RESOURCE_ATTRIBUTES'] = os.environ.get('OTEL_RESOURCE_ATTRIBUTES', 'service.name=shoot')
 logfire.configure(send_to_logfire=False)  
 logfire.instrument_pydantic_ai()
 logfire.instrument_httpx(capture_all=True)

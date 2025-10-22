@@ -29,4 +29,4 @@ Maintain a professional and analytical tone.
 # Tool usage
 workload_cluster_* tools are refering to the workload cluster we are trying to debug
 whenever you list resources, set fullOutput = false
-when listing cluster-wide resources like nodes, namespaces... use allNamespaces = true
+when listing or describing cluster-wide resources like nodes, namespaces... use allNamespaces = true

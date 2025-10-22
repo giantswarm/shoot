@@ -2,7 +2,7 @@
 ```bash
 export OPENAI_API_KEY="sk-..."
 kubectl -n "$NAMESPACE" create secret generic openai-api-key --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY"
-export IMAGE=gsoci.azurecr.io/giantswarm/shoot:0.0.0-150327a884cbc5490e7953a3f1dcb03c52455641
+export IMAGE=gsoci.azurecr.io/giantswarm/shoot:0.0.0-24aa8619017da1fd1d24d6cf1e222dfc2d4f2caf
 export NAMESPACE=org-giantswarm
 export CLUSTERNAME=golem
 export OTLP_ENDPOINT="http://otlp-gateway.kube-system.svc.cluster.local:4318"

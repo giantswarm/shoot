@@ -39,6 +39,8 @@ spec:
                   key: OPENAI_API_KEY
             - name: OTLP_ENDPOINT
               value: "${OTLP_ENDPOINT}"
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "service.name=shoot"
             - name: KUBECONFIG
               value: /home/app/k8s/kubeconfig.yaml
           volumeMounts:

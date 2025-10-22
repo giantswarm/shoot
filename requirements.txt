@@ -1,3 +1,4 @@
 pydantic-ai-slim[mcp]
 pydantic-ai-slim[openai]
-pydantic-ai-slim[logfire]
+opentelemetry-sdk
+opentelemetry-exporter-otlp

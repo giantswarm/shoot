@@ -37,8 +37,8 @@ spec:
                 secretKeyRef:
                   name: openai-api-key
                   key: OPENAI_API_KEY
-            - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: http://otlp-gateway.kube-system.svc:4318
+            - name: OTLP_ENDPOINT
+              value: "${OTLP_ENDPOINT}"
             - name: KUBECONFIG
               value: /home/app/k8s/kubeconfig.yaml
           volumeMounts:

@@ -25,7 +25,6 @@ agent = Agent(
 )
 
 async def main():
-    start_time = time.time()
     result = await agent.run(os.getenv("QUERY"))
     print(result.output)
 

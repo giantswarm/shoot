@@ -3,11 +3,12 @@ kind: Job
 metadata:
   name: ${JOB_NAME}
   namespace: ${NAMESPACE}
-  labels:
-    observability.giantswarm.io/tenant: giantswarm
 spec:
   backoffLimit: 0
   template:
+    metadata:
+      labels:
+        observability.giantswarm.io/tenant: giantswarm
     spec:
       securityContext:
         runAsNonRoot: true

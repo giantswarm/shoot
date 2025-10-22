@@ -10,7 +10,7 @@ env = os.environ.copy()
 env['KUBECONFIG'] = env.get('KUBECONFIG', '/app/kubeconfig.yaml')
 
 # Configure MCP server
-kubernetes_server = MCPServerStdio('/usr/local/bin/mcp-kubernetes', args=['serve'], env=env, tool_prefix='workload_cluster_')
+kubernetes_server = MCPServerStdio('/usr/local/bin/mcp-kubernetes', args=['serve'], env=env, tool_prefix='workload_cluster')
 
 # Configure OTEL for logging
 os.environ['OTEL_EXPORTER_OTLP_ENDPOINT'] = env.get('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4318')  

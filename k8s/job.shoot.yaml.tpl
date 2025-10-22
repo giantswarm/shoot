@@ -3,6 +3,8 @@ kind: Job
 metadata:
   name: ${JOB_NAME}
   namespace: ${NAMESPACE}
+  labels:
+    observability.giantswarm.io/tenant: giantswarm
 spec:
   backoffLimit: 0
   template:
@@ -35,6 +37,8 @@ spec:
                 secretKeyRef:
                   name: openai-api-key
                   key: OPENAI_API_KEY
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otlp-gateway.kube-system.svc:4318
             - name: KUBECONFIG
               value: /home/app/k8s/kubeconfig.yaml
           volumeMounts:

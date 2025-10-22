@@ -28,10 +28,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY main.py .
 COPY prompt.md .
 
-# Set environment variable for API key (can be overridden at runtime)
-ENV OPENAI_API_KEY=""
-ENV KUBECONFIG=/app/kubeconfig.yaml
-
 # Run the application
 CMD ["python", "main.py"]
 

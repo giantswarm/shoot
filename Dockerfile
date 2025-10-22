@@ -26,6 +26,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
 COPY main.py .
+COPY prompt.md .
 
 # Set environment variable for API key (can be overridden at runtime)
 ENV OPENAI_API_KEY=""

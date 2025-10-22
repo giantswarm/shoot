@@ -3,10 +3,7 @@ import os
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPServerStdio
 from pydantic_ai.models.openai import OpenAIResponsesModel, OpenAIResponsesModelSettings
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.trace import set_tracer_provider
+import logfire
 
 # Ensure KUBECONFIG is set and passed to the subprocess
 env = os.environ.copy()
@@ -16,13 +13,11 @@ env['KUBECONFIG'] = env.get('KUBECONFIG', '/app/kubeconfig.yaml')
 kubernetes_server = MCPServerStdio('/usr/local/bin/mcp-kubernetes', args=['serve'], env=env, tool_prefix='workload_cluster_')
 
 # Configure OTEL for logging
-os.environ['OTEL_EXPORTER_OTLP_ENDPOINT'] = env.get('OTLP_ENDPOINT', 'http://localhost:4318')  
-exporter = OTLPSpanExporter()
-span_processor = BatchSpanProcessor(exporter)
-tracer_provider = TracerProvider()
-tracer_provider.add_span_processor(span_processor)
-set_tracer_provider(tracer_provider)
-Agent.instrument_all()
+os.environ['OTEL_EXPORTER_OTLP_ENDPOINT'] = env.get('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4318')  
+os.environ['OTEL_RESOURCE_ATTRIBUTES'] = env.get('OTEL_RESOURCE_ATTRIBUTES', 'service.name=shoot')
+logfire.configure(send_to_logfire=False)  
+logfire.instrument_pydantic_ai()
+logfire.instrument_httpx(capture_all=True)
 
 # Configure model
 model = OpenAIResponsesModel('gpt-5')

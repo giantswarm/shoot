@@ -37,8 +37,8 @@ spec:
                 secretKeyRef:
                   name: openai-api-key
                   key: OPENAI_API_KEY
-            - name: OTLP_ENDPOINT
-              value: "${OTLP_ENDPOINT}"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
             - name: OTEL_RESOURCE_ATTRIBUTES
               value: "service.name=shoot"
             - name: KUBECONFIG

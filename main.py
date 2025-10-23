@@ -14,17 +14,11 @@ kubernetes_server = MCPServerStdio('/usr/local/bin/mcp-kubernetes', args=['--kub
 # Configure OTEL for logging
 os.environ['OTEL_EXPORTER_OTLP_ENDPOINT'] = os.environ.get('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4318')  
 os.environ['OTEL_RESOURCE_ATTRIBUTES'] = os.environ.get('OTEL_RESOURCE_ATTRIBUTES', 'service.name=shoot')
-logfire.configure(send_to_logfire=False)  
+logfire.configure(send_to_logfire=False, console={
+    "min_log_level": "ERROR",
+})  
 logfire.instrument_pydantic_ai()
 logfire.instrument_httpx(capture_all=True)
-
-# Configure logging
-import logging
-from logging import ERROR, basicConfig
-logfire_handler = logfire.LogfireLoggingHandler()
-urllib3_filter = logging.Filter('urllib3')
-logfire_handler.fallback.addFilter(lambda record: not urllib3_filter.filter(record))
-basicConfig(handlers=[logfire_handler], level=ERROR)
 
 # Configure model
 model = OpenAIResponsesModel('gpt-5')

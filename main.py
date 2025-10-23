@@ -15,7 +15,7 @@ kubernetes_server = MCPServerStdio('/usr/local/bin/mcp-kubernetes', args=['--kub
 os.environ['OTEL_EXPORTER_OTLP_ENDPOINT'] = os.environ.get('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4318')  
 os.environ['OTEL_RESOURCE_ATTRIBUTES'] = os.environ.get('OTEL_RESOURCE_ATTRIBUTES', 'service.name=shoot')
 logfire.configure(send_to_logfire=False, console={
-    "min_log_level": "ERROR",
+    "min_log_level": "error",
 })  
 logfire.instrument_pydantic_ai()
 logfire.instrument_httpx(capture_all=True)

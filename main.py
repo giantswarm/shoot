@@ -18,6 +18,7 @@ logfire.configure(send_to_logfire=False)
 logfire.instrument_pydantic_ai()
 logfire.instrument_httpx(capture_all=True)
 
+
 # Configure logging
 import logging
 from logging import ERROR, basicConfig

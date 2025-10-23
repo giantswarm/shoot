@@ -23,6 +23,7 @@ span_processor = BatchSpanProcessor(exporter)
 tracer_provider = TracerProvider()
 tracer_provider.add_span_processor(span_processor)
 set_tracer_provider(tracer_provider)
+Agent.instrument_all()
 
 # Configure model
 model = OpenAIResponsesModel('gpt-5')

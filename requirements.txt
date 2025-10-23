@@ -1,2 +1,3 @@
 pydantic-ai-slim[mcp]
 pydantic-ai-slim[openai]
+pydantic-ai-slim[logfire]

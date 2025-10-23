@@ -12,11 +12,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Download and install mcp-kubernetes binary (latest v0.0.35)
-# RUN curl -L https://github.com/containers/kubernetes-mcp-server/releases/download/v0.0.52/kubernetes-mcp-server-linux-amd64 -o /usr/local/bin/mcp-kubernetes \
-#     && chmod +x /usr/local/bin/mcp-kubernetes
-
-COPY mcp-kubernetes /usr/local/bin/mcp-kubernetes
-RUN chmod +x /usr/local/bin/mcp-kubernetes
+RUN curl -L https://github.com/containers/kubernetes-mcp-server/releases/download/v0.0.53/kubernetes-mcp-server-linux-amd64 -o /usr/local/bin/mcp-kubernetes \
+    && chmod +x /usr/local/bin/mcp-kubernetes
 
 # Set working directory
 WORKDIR /app
@@ -29,10 +26,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
 COPY main.py .
-
-# Set environment variable for API key (can be overridden at runtime)
-ENV OPENAI_API_KEY=""
-ENV KUBECONFIG=/app/kubeconfig.yaml
+COPY prompt.md .
 
 # Run the application
 CMD ["python", "main.py"]

@@ -18,6 +18,15 @@ logfire.configure(send_to_logfire=False)
 logfire.instrument_pydantic_ai()
 logfire.instrument_httpx(capture_all=True)
 
+# Configure logging
+import logging
+from logging import ERROR, basicConfig
+logfire.configure()
+logfire_handler = logfire.LogfireLoggingHandler()
+urllib3_filter = logging.Filter('urllib3')
+logfire_handler.fallback.addFilter(lambda record: not urllib3_filter.filter(record))
+basicConfig(handlers=[logfire_handler], level=ERROR)
+
 # Configure model
 model = OpenAIResponsesModel('gpt-5')
 settings = OpenAIResponsesModelSettings(

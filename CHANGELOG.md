@@ -10,3 +10,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - First release using Pydantic AI and using a single MCP pointing to the
+
+
+[Unreleased]: https://github.com/giantswarm/shoot/compare/v0.0.0...HEAD

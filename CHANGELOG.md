@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Use OpenTelemtry exporter directly, not logfire.
+- Tag latest when building from main.
+
 ## [1.0.0] - 2025-10-23
 
 ### Changed

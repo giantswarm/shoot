@@ -10,6 +10,7 @@ workflows:
         name: push-to-registries
         registries-data: |-
           public gsoci.azurecr.io ACR_GSOCI_USERNAME ACR_GSOCI_PASSWORD true
+        tag-latest-branch: "main"
         filters:
           tags:
             only: /^v.*/

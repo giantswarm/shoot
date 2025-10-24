@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2] - 2025-10-24
+
 ### Changed
 
 - Test release
@@ -30,7 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First release using Pydantic AI and using a single MCP pointing to the
 
 
-[Unreleased]: https://github.com/giantswarm/shoot/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/giantswarm/shoot/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/giantswarm/shoot/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/giantswarm/shoot/compare/v1.1.1...v1.1.1
 [1.1.1]: https://github.com/giantswarm/shoot/compare/v1.0.0...v1.1.1
 [1.0.0]: https://github.com/giantswarm/shoot/compare/v0.0.0...v1.0.0

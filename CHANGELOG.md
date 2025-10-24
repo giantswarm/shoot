@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Tag latest when building from main.
+
+## [1.1.0] - 2025-10-23
+
+### Changed
+
+- Use OpenTelemtry exporter directly, not logfire.
+
 ## [1.0.0] - 2025-10-23
 
 ### Changed
@@ -16,3 +26,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [Unreleased]: https://github.com/giantswarm/shoot/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/giantswarm/shoot/compare/v0.0.0...v1.0.0
+[1.1.0]: https://github.com/giantswarm/shoot/compare/v1.0.0...v1.1.0

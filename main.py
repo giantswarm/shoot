@@ -7,7 +7,15 @@ from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExport
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace import set_tracer_provider
+from fastapi import FastAPI, HTTPException, Request
 
+
+# HTTP Server
+app = FastAPI(
+    title="Shoot API",
+    description="A simple API serving the Giantswarm Shoot agent",
+    version="1.0.0"
+)
 
 # Ensure KUBECONFIG is set and passed to the subprocess
 os.environ['KUBECONFIG'] = os.environ.get('KUBECONFIG', '/app/kubeconfig.yaml')
@@ -51,3 +59,16 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+@app.post("/run")
+async def run(request: Request):
+    try:
+        data = await request.json()
+        query = data.get("query")
+        print(f"Running query: {query}")
+        if not query:
+            raise HTTPException(status_code=400, detail="Query is required")
+        result = await agent.run(query)
+        return {"result": result.output}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

@@ -2,3 +2,5 @@ pydantic-ai-slim[mcp]
 pydantic-ai-slim[openai]
 opentelemetry-sdk
 opentelemetry-exporter-otlp
+fastapi
+uvicorn

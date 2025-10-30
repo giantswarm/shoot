@@ -15,39 +15,38 @@ if [[ -z "${IMAGE}" ]]; then
   exit 2
 fi
 
-JOB=shoot-$(date +%s)
+POD=shoot-$(date +%s)
 
-# Render and apply the Job
+# Render and apply the Pod
 if [[ -z "${QUERY_ARG}" ]]; then
   QUERY_ARG="list namespaces"
 fi
 
-export NAMESPACE="$NS" CLUSTERNAME="$CLUSTER" JOB_NAME="$JOB" QUERY="$QUERY_ARG"
+export NAMESPACE="$NS" CLUSTERNAME="$CLUSTER" POD_NAME="$POD" QUERY="$QUERY_ARG"
 envsubst < k8s/job.shoot.yaml.tpl | kubectl apply -f -
 
-# Actively watch for Complete or Failed (exit immediately on either), 20m timeout
+# Actively watch for Succeeded or Failed (exit immediately on either), 20m timeout
 deadline=$(( $(date +%s) + 1200 ))
 while true; do
-  # Query conditions; tolerate transient lookup errors
-  complete=$(kubectl -n "$NS" get job "$JOB" -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}' 2>/dev/null || true)
-  failed=$(kubectl -n "$NS" get job "$JOB" -o jsonpath='{.status.conditions[?(@.type=="Failed")].status}' 2>/dev/null || true)
+  # Query phase; tolerate transient lookup errors
+  phase=$(kubectl -n "$NS" get pod "$POD" -o jsonpath='{.status.phase}' 2>/dev/null || echo "Pending")
 
-  if [[ "$failed" == "True" ]]; then
-    echo "Job failed; showing status and logs" >&2
-    kubectl -n "$NS" describe job "$JOB" || true
-    kubectl -n "$NS" logs job/"$JOB" --all-containers=true --tail=-1 || true
+  if [[ "$phase" == "Failed" ]]; then
+    echo "Pod failed; showing status and logs" >&2
+    kubectl -n "$NS" describe pod "$POD" || true
+    kubectl -n "$NS" logs pod/"$POD" --all-containers=true --tail=-1 || true
     exit 1
   fi
 
-  if [[ "$complete" == "True" ]]; then
-    kubectl -n "$NS" logs job/"$JOB" --all-containers=true --tail=-1 || true
+  if [[ "$phase" == "Succeeded" ]]; then
+    kubectl -n "$NS" logs pod/"$POD" --all-containers=true --tail=-1 || true
     exit 0
   fi
 
   if [[ $(date +%s) -ge $deadline ]]; then
-    echo "Timeout waiting for job to complete or fail; showing status and logs" >&2
-    kubectl -n "$NS" describe job "$JOB" || true
-    kubectl -n "$NS" logs job/"$JOB" --all-containers=true --tail=-1 || true
+    echo "Timeout waiting for pod to complete or fail; showing status and logs" >&2
+    kubectl -n "$NS" describe pod "$POD" || true
+    kubectl -n "$NS" logs pod/"$POD" --all-containers=true --tail=-1 || true
     exit 1
   fi
 

@@ -69,3 +69,6 @@ affinity: {}
 otelExporterOtlpEndpoint: "http://otlp-gateway.kube-system.svc.cluster.local:4318"
 
 clusterID: ""
+
+# Default to gpt-5-mini, we can also use gpt-5 for better performance but more expensive and slower
+openaiModel: "gpt-5-mini"

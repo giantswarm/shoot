@@ -21,7 +21,7 @@ set_tracer_provider(tracer_provider)
 Agent.instrument_all()
 
 # Configure model
-model = OpenAIResponsesModel('gpt-5')
+model = OpenAIResponsesModel(os.environ['OPENAI_MODEL'])
 settings = OpenAIResponsesModelSettings(
     openai_reasoning_effort='high',
     openai_reasoning_summary='detailed',

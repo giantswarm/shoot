@@ -37,6 +37,9 @@
         "nodeSelector": {
             "type": "object"
         },
+        "openaiModel": {
+            "type": "string"
+        },
         "otelExporterOtlpEndpoint": {
             "type": "string"
         },

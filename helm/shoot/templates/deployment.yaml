@@ -49,6 +49,8 @@ spec:
               value: service.name=shoot
             - name: KUBECONFIG
               value: /k8s/kubeconfig.yaml
+            - name: OPENAI_MODEL
+              value: {{ .Values.openaiModel }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:

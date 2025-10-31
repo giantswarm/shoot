@@ -18,4 +18,21 @@ workflows:
           branches:
             ignore:
             - main
-            - master
+            
+    - architect/push-to-app-catalog:
+        executor: app-build-suite
+        context: architect
+        name: push-shoot-to-giantswarm-app-catalog
+        app_catalog: giantswarm-catalog
+        app_catalog_test: giantswarm-test-catalog
+        chart: shoot
+        requires:
+        - push-to-registries
+        persist_chart_archive: true
+        filters:
+          tags:
+            only: /^v.*/
+
+          branches:
+            ignore:
+            - main

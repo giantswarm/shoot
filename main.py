@@ -1,5 +1,6 @@
 import os
 import logging
+from string import Template
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPServerStdio
 from pydantic_ai.models.openai import OpenAIResponsesModel, OpenAIResponsesModelSettings
@@ -11,7 +12,8 @@ from fastapi import FastAPI, HTTPException, Request
 
 
 # Configure MCP server
-kubernetes_server = MCPServerStdio('/usr/local/bin/mcp-kubernetes', args=['--kubeconfig', os.environ['KUBECONFIG'], '--read-only'], env=os.environ, tool_prefix='workload_cluster')
+kubernetes_wc = MCPServerStdio('/usr/local/bin/mcp-kubernetes', args=['serve', '--non-destructive '], env=os.environ, tool_prefix='workload_cluster')
+kubernetes_mc = MCPServerStdio('/usr/local/bin/mcp-kubernetes', args=['serve', '--non-destructive ', '--in-cluster'], tool_prefix='management_cluster')
 
 # Configure OTEL for logging
 exporter = OTLPSpanExporter()
@@ -29,13 +31,16 @@ settings = OpenAIResponsesModelSettings(
 )
 
 # Configure agent
+prompt_template = Template(open('prompt.md').read())
+system_prompt = prompt_template.safe_substitute(
+    WC_CLUSTER=os.environ.get('WC_CLUSTER', 'workload cluster'),
+    ORG_NS=os.environ.get('ORG_NS', 'organization namespace'),
+)
 agent = Agent(
     model, 
     model_settings=settings, 
-    toolsets=[kubernetes_server],
-    system_prompt=(
-        open('prompt.md').read()
-    ),
+    toolsets=[kubernetes_wc, kubernetes_mc],
+    system_prompt=system_prompt,
 )
 
 # Configure logging filter to suppress healthcheck endpoint logs

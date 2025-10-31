@@ -2,6 +2,10 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
+# Default to gpt-5-mini, we can also use gpt-5 for better performance but more expensive and slower
+openaiModel: "gpt-5-mini"
+otelExporterOtlpEndpoint: "http://otlp-gateway.kube-system.svc.cluster.local:4318"
+
 replicaCount: 1
 
 image:
@@ -66,13 +70,6 @@ tolerations: []
 
 affinity: {}
 
-otelExporterOtlpEndpoint: "http://otlp-gateway.kube-system.svc.cluster.local:4318"
-
-clusterID: ""
-
-# Default to gpt-5-mini, we can also use gpt-5 for better performance but more expensive and slower
-openaiModel: "gpt-5-mini"
-
 # Healthcheck configuration
 livenessProbe:
   httpGet:
@@ -93,3 +90,5 @@ readinessProbe:
   timeoutSeconds: 3
   failureThreshold: 3
   successThreshold: 1
+
+clusterID: ""

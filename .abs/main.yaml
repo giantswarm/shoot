@@ -3,4 +3,5 @@ chart-dir: helm/shoot
 destination: ./build
 generate-metadata: true
 replace-chart-version-with-git: true
+replace-app-version-with-git: true
 giantswarm-validator-ignored-checks: C0001

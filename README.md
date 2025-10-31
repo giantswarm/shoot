@@ -1,6 +1,6 @@
 # Deployment
 ```
-Replace <cluster_id> with clusterid and deploy on Management Cluster
+Replace <cluster_id> and <org-namespace> and deploy on Management Cluster
 
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
@@ -9,7 +9,6 @@ metadata:
     app: shoot
     application.giantswarm.io/team: phoenix
     giantswarm.io/cluster: <cluster_id>
-    giantswarm.io/organization: giantswarm
   name: <cluster_id>-shoot
   namespace: org-giantswarm
 spec:
@@ -37,7 +36,14 @@ spec:
   upgrade:
     remediation:
       retries: -1
+  valuesFrom:
+    - kind: ConfigMap
+      name: <cluster_id>-cluster-values
+      valuesKey: values
 ```
+
+# Test
+Open a shell in the pod and `curl 127.0.0.1:8000/run --data '{"query": "list namespacer"}'`
 
 # How to push latest image
 ```

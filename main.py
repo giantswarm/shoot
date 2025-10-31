@@ -12,8 +12,8 @@ from fastapi import FastAPI, HTTPException, Request
 
 
 # Configure MCP server
-kubernetes_wc = MCPServerStdio('/usr/local/bin/mcp-kubernetes', args=['serve', '--non-destructive '], env=os.environ, tool_prefix='workload_cluster')
-kubernetes_mc = MCPServerStdio('/usr/local/bin/mcp-kubernetes', args=['serve', '--non-destructive ', '--in-cluster'], tool_prefix='management_cluster')
+kubernetes_wc = MCPServerStdio('/usr/local/bin/mcp-kubernetes', args=['serve', '--non-destructive'], env=os.environ, tool_prefix='workload_cluster')
+kubernetes_mc = MCPServerStdio('/usr/local/bin/mcp-kubernetes', args=['serve', '--non-destructive', '--in-cluster'], tool_prefix='management_cluster')
 
 # Configure OTEL for logging
 exporter = OTLPSpanExporter()

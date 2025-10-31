@@ -72,3 +72,24 @@ clusterID: ""
 
 # Default to gpt-5-mini, we can also use gpt-5 for better performance but more expensive and slower
 openaiModel: "gpt-5-mini"
+
+# Healthcheck configuration
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+  successThreshold: 1

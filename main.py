@@ -44,6 +44,30 @@ app = FastAPI(
     version="1.0.0"
 )
 
+@app.get("/health")
+async def health():
+    """Liveness probe - checks if the application is running."""
+    return {"status": "healthy"}
+
+
+@app.get("/ready")
+async def ready():
+    """Readiness probe - checks if the application is ready to serve traffic."""
+    # Check if critical dependencies are available
+    checks = {
+        "status": "ready",
+        "kubernetes_server": kubernetes_server is not None,
+        "model": model is not None,
+        "agent": agent is not None,
+    }
+    
+    # If any critical dependency is missing, return 503
+    if not all([checks["kubernetes_server"], checks["model"], checks["agent"]]):
+        raise HTTPException(status_code=503, detail=checks)
+    
+    return checks
+
+
 @app.post("/run")
 async def run(request: Request):
     try:

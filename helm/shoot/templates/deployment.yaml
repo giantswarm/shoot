@@ -48,12 +48,12 @@ spec:
             - name: OTEL_RESOURCE_ATTRIBUTES
               value: service.name=shoot
             - name: KUBECONFIG
-              value: /app/kubeconfig.yaml
+              value: /k8s/kubeconfig.yaml
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
             - name: kubeconfig
-              mountPath: /app/kubeconfig.yaml
+              mountPath: /k8s
           {{- with .Values.volumeMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}

@@ -1,4 +1,5 @@
 import os
+import logging
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPServerStdio
 from pydantic_ai.models.openai import OpenAIResponsesModel, OpenAIResponsesModelSettings
@@ -36,6 +37,27 @@ agent = Agent(
         open('prompt.md').read()
     ),
 )
+
+# Configure logging filter to suppress healthcheck endpoint logs
+class HealthcheckLogFilter(logging.Filter):
+    """Filter to prevent logging access to healthcheck endpoints."""
+    
+    def filter(self, record):
+        # Filter out access logs for /health and /ready endpoints
+        # uvicorn access logs can have various formats, so we check the message content
+        message = record.getMessage()
+        # Check for common patterns: "/health" or "/ready" in the log message
+        # This covers formats like: "GET /health HTTP/1.1" 200, "/health", etc.
+        if "/health" in message or "/ready" in message:
+            # Double-check it's an access log (not an error or other log)
+            # Access logs typically contain HTTP methods or status codes
+            if any(x in message for x in ["GET", "POST", "PUT", "DELETE", "PATCH", " HTTP/", " 200", " 503", " 404"]):
+                return False
+        return True
+
+# Apply the filter to uvicorn access logger
+uvicorn_access_logger = logging.getLogger("uvicorn.access")
+uvicorn_access_logger.addFilter(HealthcheckLogFilter())
 
 # Configure HTTP endpoint
 app = FastAPI(

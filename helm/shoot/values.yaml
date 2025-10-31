@@ -65,3 +65,7 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+otelExporterOtlpEndpoint: "http://otlp-gateway.kube-system.svc.cluster.local:4318"
+
+clusterID: ""

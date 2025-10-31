@@ -5,6 +5,9 @@
         "affinity": {
             "type": "object"
         },
+        "clusterID": {
+            "type": "string"
+        },
         "fullnameOverride": {
             "type": "string"
         },
@@ -33,6 +36,9 @@
         },
         "nodeSelector": {
             "type": "object"
+        },
+        "otelExporterOtlpEndpoint": {
+            "type": "string"
         },
         "podAnnotations": {
             "type": "object"
@@ -133,23 +139,6 @@
                     "type": "integer"
                 },
                 "type": {
-                    "type": "string"
-                }
-            }
-        },
-        "serviceAccount": {
-            "type": "object",
-            "properties": {
-                "annotations": {
-                    "type": "object"
-                },
-                "automount": {
-                    "type": "boolean"
-                },
-                "create": {
-                    "type": "boolean"
-                },
-                "name": {
                     "type": "string"
                 }
             }

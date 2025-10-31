@@ -54,7 +54,7 @@ spec:
       volumes:
         - name: kubeconfig
           secret:
-            secretName: "{{ .Values.clusterName }}-kubeconfig"
+            secretName: "{{ .Values.clusterID }}-kubeconfig"
             items:
               - key: value
                 path: kubeconfig.yaml

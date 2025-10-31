@@ -45,6 +45,10 @@ spec:
                   key: OPENAI_API_KEY
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: {{ .Values.otelExporterOtlpEndpoint }}
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: service.name=shoot
+            - name: KUBECONFIG
+              value: /app/kubeconfig.yaml
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:

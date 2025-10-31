@@ -1,4 +1,3 @@
-import asyncio
 import os
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPServerStdio
@@ -10,22 +9,10 @@ from opentelemetry.trace import set_tracer_provider
 from fastapi import FastAPI, HTTPException, Request
 
 
-# HTTP Server
-app = FastAPI(
-    title="Shoot API",
-    description="A simple API serving the Giantswarm Shoot agent",
-    version="1.0.0"
-)
-
-# Ensure KUBECONFIG is set and passed to the subprocess
-os.environ['KUBECONFIG'] = os.environ.get('KUBECONFIG', '/app/kubeconfig.yaml')
-
 # Configure MCP server
 kubernetes_server = MCPServerStdio('/usr/local/bin/mcp-kubernetes', args=['--kubeconfig', os.environ['KUBECONFIG'], '--read-only'], env=os.environ, tool_prefix='workload_cluster')
 
 # Configure OTEL for logging
-os.environ['OTEL_EXPORTER_OTLP_ENDPOINT'] = os.environ.get('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4318')  
-os.environ['OTEL_RESOURCE_ATTRIBUTES'] = os.environ.get('OTEL_RESOURCE_ATTRIBUTES', 'service.name=shoot')
 exporter = OTLPSpanExporter()
 span_processor = BatchSpanProcessor(exporter)
 tracer_provider = TracerProvider()
@@ -50,22 +37,18 @@ agent = Agent(
     ),
 )
 
-# Main function
-async def main():
-    # Run agent
-    result = await agent.run(os.getenv("QUERY"))
-    # Print result
-    print(result.output)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+# Configure HTTP endpoint
+app = FastAPI(
+    title="Shoot API",
+    description="A simple API serving the Giantswarm Shoot agent",
+    version="1.0.0"
+)
 
 @app.post("/run")
 async def run(request: Request):
     try:
         data = await request.json()
         query = data.get("query")
-        print(f"Running query: {query}")
         if not query:
             raise HTTPException(status_code=400, detail="Query is required")
         result = await agent.run(query)

@@ -28,7 +28,6 @@ workflows:
         chart: shoot
         requires:
         - push-to-registries
-        persist_chart_archive: true
         filters:
           tags:
             only: /^v.*/

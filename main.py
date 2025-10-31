@@ -74,13 +74,14 @@ async def ready():
     # Check if critical dependencies are available
     checks = {
         "status": "ready",
-        "kubernetes_server": kubernetes_server is not None,
+        "kubernetes_wc": kubernetes_wc is not None,
+        "kubernetes_mc": kubernetes_mc is not None,
         "model": model is not None,
         "agent": agent is not None,
     }
     
     # If any critical dependency is missing, return 503
-    if not all([checks["kubernetes_server"], checks["model"], checks["agent"]]):
+    if not all([checks["kubernetes_wc"], checks["kubernetes_mc"], checks["model"], checks["agent"]]):
         raise HTTPException(status_code=503, detail=checks)
     
     return checks

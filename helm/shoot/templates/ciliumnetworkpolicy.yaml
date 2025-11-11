@@ -1,0 +1,22 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ include "shoot.fullname" . }}
+  labels:
+    {{- include "shoot.labels" . | nindent 4 }}
+spec:
+  endpointSelector:
+    matchLabels:
+      {{- include "shoot.selectorLabels" . | nindent 6 }}
+  ingress:
+    - toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+  egress:
+    - toEntities:
+        - cluster
+    # Allow internet access (all external traffic)
+    - toEntities:
+        - world
+

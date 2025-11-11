@@ -87,7 +87,7 @@ async def ready():
     return checks
 
 
-@app.post("/run")
+@app.post("/")
 async def run(request: Request):
     try:
         data = await request.json()

@@ -43,7 +43,7 @@ spec:
 ```
 
 # Test
-Open a shell in the pod and `curl 127.0.0.1:8000/run --data '{"query": "list namespaces"}'`
+Open a shell in the pod and `curl 127.0.0.1:8000/ --data '{"query": "list namespaces"}'`
 
 # How to push latest image
 ```

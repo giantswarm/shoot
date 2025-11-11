@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Change
+
+- Change endpoint to serve on / instead of /run
+
 ## [2.2.0] - 2025-11-11
 
 ### Change

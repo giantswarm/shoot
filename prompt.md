@@ -34,5 +34,6 @@ when listing clusterwide resources like nodes, namespaces, clusterroles use allN
 
 # Management cluster
 The management cluster uses CAPI to provision and manage workload clusters.
-All the applications are managed with either flux (helm.toolkit.fluxcd.io/v2 HelmRelease) or giantswarm app platform (application.giantswarm.io App). These are installed in the namespace ${ORG_NS}.
+All the applications are managed with either flux (helm.toolkit.fluxcd.io/v2 HelmRelease) or giantswarm app platform (application.giantswarm.io App).
 The cluster definition is managed with an App named ${WC_CLUSTER} in ${ORG_NS}
+You only have permission to read resources within ${ORG_NS}, whenever you are listing resources filter by this namespace.

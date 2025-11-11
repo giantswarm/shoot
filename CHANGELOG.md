@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Switch from Job to Deployment. FastAPI will serve an HTTP endpoint for AI debugging.
+
 ## [1.1.2] - 2025-10-24
 
 ### Changed

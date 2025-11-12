@@ -60,6 +60,8 @@ spec:
               value: {{ .Values.clusterID }}
             - name: ORG_NS
               value: {{ .Release.Namespace }}
+            - name: DEBUG
+              value: {{ .Values.debug | quote }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:

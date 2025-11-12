@@ -23,6 +23,13 @@ async def collect_wc_data(ctx: RunContext[CollectorAgents], query: str) -> str:
     async with anyio.create_task_group() as tg:
         tg.start_soon(run_agent)
     # Task group waits for completion before exiting, ensuring result is available
+    
+    # Debug mode: print all messages before returning output
+    if os.environ.get("DEBUG", "").lower() in ("true", "1", "yes"):
+        print("=== DEBUG MODE: WC Collector All Messages ===")
+        print(result_container['result'].all_messages())
+        print("=== End WC Collector Debug Output ===")
+    
     return result_container['result'].output
 
 
@@ -37,6 +44,13 @@ async def collect_mc_data(ctx: RunContext[CollectorAgents], query: str) -> str:
     async with anyio.create_task_group() as tg:
         tg.start_soon(run_agent)
     # Task group waits for completion before exiting, ensuring result is available
+    
+    # Debug mode: print all messages before returning output
+    if os.environ.get("DEBUG", "").lower() in ("true", "1", "yes"):
+        print("=== DEBUG MODE: MC Collector All Messages ===")
+        print(result_container['result'].all_messages())
+        print("=== End MC Collector Debug Output ===")
+    
     return result_container['result'].output
 
 

@@ -4,7 +4,9 @@
 
 openaiCoodrinatorModel: "gpt-5"
 openaiCollectorModel: "gpt-5-mini"
+openaiAPIKey: ""
 otelExporterOtlpEndpoint: "http://otlp-gateway.kube-system.svc.cluster.local:4318"
+debug: false
 
 replicaCount: 1
 

@@ -5,8 +5,8 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace import set_tracer_provider
 from fastapi import FastAPI, HTTPException, Request
-from coordinator import create_coordinator
-from collectors import kubernetes_wc, kubernetes_mc
+from coordinator import create_coordinator, CollectorAgents
+from collectors import kubernetes_wc, kubernetes_mc, create_wc_collector, create_mc_collector
 
 # Configure OTEL for logging
 exporter = OTLPSpanExporter()
@@ -18,6 +18,10 @@ Agent.instrument_all()
 
 # Create coordinator agent (which manages collector agents)
 coordinator = create_coordinator()
+
+# Create collector agents (these will be passed as dependencies)
+wc_collector = create_wc_collector()
+mc_collector = create_mc_collector()
 
 # Configure logging filter to suppress healthcheck endpoint logs
 class HealthcheckLogFilter(logging.Filter):    
@@ -69,7 +73,8 @@ async def run(request: Request):
         query = data.get("query")
         if not query:
             raise HTTPException(status_code=400, detail="Query is required")
-        result = await coordinator.run(query)
+        deps = CollectorAgents(wc_collector=wc_collector, mc_collector=mc_collector)
+        result = await coordinator.run(query, deps=deps)
         return result.output
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

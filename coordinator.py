@@ -1,6 +1,7 @@
 import os
 from dataclasses import dataclass
 from string import Template
+import anyio
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.openai import OpenAIResponsesModel, OpenAIResponsesModelSettings
 
@@ -13,14 +14,30 @@ class CollectorAgents:
 
 async def collect_wc_data(ctx: RunContext[CollectorAgents], query: str) -> str:
     """Collect data from the workload cluster."""
-    result = await ctx.deps.wc_collector.run(query, usage=ctx.usage)
-    return result.output
+    # Run nested agent in a separate task group to avoid cancel scope conflicts
+    # This isolates the nested agent's cancel scope from the parent agent's scope
+    result_container = {}
+    async def run_agent():
+        result_container['result'] = await ctx.deps.wc_collector.run(query, usage=ctx.usage)
+    
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(run_agent)
+    # Task group waits for completion before exiting, ensuring result is available
+    return result_container['result'].output
 
 
 async def collect_mc_data(ctx: RunContext[CollectorAgents], query: str) -> str:
     """Collect data from the management cluster."""
-    result = await ctx.deps.mc_collector.run(query, usage=ctx.usage)
-    return result.output
+    # Run nested agent in a separate task group to avoid cancel scope conflicts
+    # This isolates the nested agent's cancel scope from the parent agent's scope
+    result_container = {}
+    async def run_agent():
+        result_container['result'] = await ctx.deps.mc_collector.run(query, usage=ctx.usage)
+    
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(run_agent)
+    # Task group waits for completion before exiting, ensuring result is available
+    return result_container['result'].output
 
 
 def create_coordinator() -> Agent[CollectorAgents]:

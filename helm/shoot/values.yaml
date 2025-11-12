@@ -2,8 +2,8 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
-# Default to gpt-5-mini, we can also use gpt-5 for better performance but more expensive and slower
-openaiModel: "gpt-5-mini"
+openaiCoodrinatorModel: "gpt-5"
+openaiCollectorModel: "gpt-5-mini"
 otelExporterOtlpEndpoint: "http://otlp-gateway.kube-system.svc.cluster.local:4318"
 
 replicaCount: 1

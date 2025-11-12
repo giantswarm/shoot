@@ -1,19 +1,12 @@
-import os
 import logging
-from string import Template
 from pydantic_ai import Agent
-from pydantic_ai.mcp import MCPServerStdio
-from pydantic_ai.models.openai import OpenAIResponsesModel, OpenAIResponsesModelSettings
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace import set_tracer_provider
 from fastapi import FastAPI, HTTPException, Request
-
-
-# Configure MCP server
-kubernetes_wc = MCPServerStdio('/usr/local/bin/mcp-kubernetes', args=['serve', '--non-destructive'], env=os.environ, tool_prefix='workload_cluster')
-kubernetes_mc = MCPServerStdio('/usr/local/bin/mcp-kubernetes', args=['serve', '--non-destructive', '--in-cluster'], env=os.environ, tool_prefix='management_cluster')
+from coordinator import create_coordinator
+from collectors import kubernetes_wc, kubernetes_mc
 
 # Configure OTEL for logging
 exporter = OTLPSpanExporter()
@@ -23,25 +16,8 @@ tracer_provider.add_span_processor(span_processor)
 set_tracer_provider(tracer_provider)
 Agent.instrument_all()
 
-# Configure model
-model = OpenAIResponsesModel(os.environ['OPENAI_MODEL'])
-settings = OpenAIResponsesModelSettings(
-    openai_reasoning_effort='high',
-    openai_reasoning_summary='detailed',
-)
-
-# Configure agent
-prompt_template = Template(open('prompt.md').read())
-system_prompt = prompt_template.safe_substitute(
-    WC_CLUSTER=os.environ.get('WC_CLUSTER', 'workload cluster'),
-    ORG_NS=os.environ.get('ORG_NS', 'organization namespace'),
-)
-agent = Agent(
-    model, 
-    model_settings=settings, 
-    toolsets=[kubernetes_wc, kubernetes_mc],
-    system_prompt=system_prompt,
-)
+# Create coordinator agent (which manages collector agents)
+coordinator = create_coordinator()
 
 # Configure logging filter to suppress healthcheck endpoint logs
 class HealthcheckLogFilter(logging.Filter):    
@@ -76,12 +52,11 @@ async def ready():
         "status": "ready",
         "kubernetes_wc": kubernetes_wc is not None,
         "kubernetes_mc": kubernetes_mc is not None,
-        "model": model is not None,
-        "agent": agent is not None,
+        "coordinator": coordinator is not None,
     }
     
     # If any critical dependency is missing, return 503
-    if not all([checks["kubernetes_wc"], checks["kubernetes_mc"], checks["model"], checks["agent"]]):
+    if not all([checks["kubernetes_wc"], checks["kubernetes_mc"], checks["coordinator"]]):
         raise HTTPException(status_code=503, detail=checks)
     
     return checks
@@ -94,7 +69,7 @@ async def run(request: Request):
         query = data.get("query")
         if not query:
             raise HTTPException(status_code=400, detail="Query is required")
-        result = await agent.run(query)
+        result = await coordinator.run(query)
         return result.output
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

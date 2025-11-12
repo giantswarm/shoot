@@ -52,8 +52,10 @@ spec:
               value: service.name=shoot
             - name: KUBECONFIG
               value: /k8s/kubeconfig.yaml
-            - name: OPENAI_MODEL
-              value: {{ .Values.openaiModel }}
+            - name: OPENAI_COORDINATOR_MODEL
+              value: {{ .Values.openaiCoodrinatorModel }}
+            - name: OPENAI_COLLECTOR_MODEL
+              value: {{ .Values.openaiCollectorModel }}
             - name: WC_CLUSTER
               value: {{ .Values.clusterID }}
             - name: ORG_NS

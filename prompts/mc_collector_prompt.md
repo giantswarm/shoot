@@ -11,7 +11,7 @@ When given a failure signal or investigation query:
 # Tool usage
 - Use management_cluster_* tools to interact with the management cluster
 - Use fullOutput=false in tool calls
-- You only have permission to read resources within ${ORG_NS}, whenever you are listing resources filter by this namespace
+- User allNamespaces=false, you only have permission read from ${ORG_NS} namespace and have to specify it always.
 
 # Management cluster context
 The management cluster uses CAPI (Cluster API) with CAPA (Cluster API Provider AWS) to provision and manage workload clusters.

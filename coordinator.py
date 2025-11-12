@@ -4,6 +4,7 @@ from string import Template
 import anyio
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.openai import OpenAIResponsesModel, OpenAIResponsesModelSettings
+from logging import logger
 
 @dataclass
 class CollectorAgents:
@@ -26,9 +27,9 @@ async def collect_wc_data(ctx: RunContext[CollectorAgents], query: str) -> str:
     
     # Debug mode: print all messages before returning output
     if os.environ.get("DEBUG", "").lower() in ("true", "1", "yes"):
-        print("=== DEBUG MODE: WC Collector All Messages ===")
-        print(result_container['result'].all_messages())
-        print("=== End WC Collector Debug Output ===")
+        logger.info("=== DEBUG MODE: WC Collector All Messages ===")
+        logger.info(result_container['result'].all_messages())
+        logger.info("=== End WC Collector Debug Output ===")
     
     return result_container['result'].output
 
@@ -47,9 +48,9 @@ async def collect_mc_data(ctx: RunContext[CollectorAgents], query: str) -> str:
     
     # Debug mode: print all messages before returning output
     if os.environ.get("DEBUG", "").lower() in ("true", "1", "yes"):
-        print("=== DEBUG MODE: MC Collector All Messages ===")
-        print(result_container['result'].all_messages())
-        print("=== End MC Collector Debug Output ===")
+        logger.info("=== DEBUG MODE: MC Collector All Messages ===")
+        logger.info(result_container['result'].all_messages())
+        logger.info("=== End MC Collector Debug Output ===")
     
     return result_container['result'].output
 

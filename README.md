@@ -11,6 +11,8 @@ Kubernetes multi-agent system that helps:
 
 Multi-agent system for Kubernetes E2E debugging:
 
+The system is workload-cluster-first: runtime evidence is gathered from the workload cluster; the management cluster is used only for App/HelmRelease deployment status and Cluster API (CAPI) object status.
+
 - **Coordinator Agent**: Orchestrates investigation, synthesizes findings from collectors, generates diagnostic reports. Uses a powerful reasoning model (configurable via `OPENAI_COORDINATOR_MODEL`).
 - **WC Collector Agent**: Collects diagnostic data from the workload cluster via Kubernetes MCP server (`workload_cluster_*` tools).
 - **MC Collector Agent**: Collects diagnostic data from the management cluster via Kubernetes MCP server (`management_cluster_*` tools).

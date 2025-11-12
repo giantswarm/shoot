@@ -28,6 +28,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY main.py .
 COPY coordinator.py .
 COPY collectors.py .
+COPY logging.py .
 COPY prompts/ prompts/
 
 # Run the application

@@ -13,7 +13,7 @@ kubernetes_mc = MCPServerStdio('/usr/local/bin/mcp-kubernetes', args=['serve', '
 def create_wc_collector() -> Agent:
     """Create the workload cluster collector agent."""
     # Use simpler model for collectors (cost and speed optimization)
-    collector_model_name = os.environ.get('COLLECTOR_MODEL', 'gpt-4o-mini')
+    collector_model_name = os.environ.get('OPENAI_COLLECTOR_MODEL', 'gpt-4o-mini')
     collector_model = OpenAIResponsesModel(collector_model_name)
     
     # Load and substitute prompt template
@@ -32,7 +32,7 @@ def create_wc_collector() -> Agent:
 def create_mc_collector() -> Agent:
     """Create the management cluster collector agent."""
     # Use simpler model for collectors (cost and speed optimization)
-    collector_model_name = os.environ.get('COLLECTOR_MODEL', 'gpt-4o-mini')
+    collector_model_name = os.environ.get('OPENAI_COLLECTOR_MODEL', 'gpt-4o-mini')
     collector_model = OpenAIResponsesModel(collector_model_name)
     
     # Load and substitute prompt template

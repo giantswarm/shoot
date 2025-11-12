@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Fix collector model value.
+
 ## [2.5.0] - 2025-11-12
 
 ## [2.4.2] - 2025-11-12

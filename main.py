@@ -95,6 +95,6 @@ async def run(request: Request):
         if not query:
             raise HTTPException(status_code=400, detail="Query is required")
         result = await agent.run(query)
-        return {"result": result.output}
+        return result.output
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

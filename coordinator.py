@@ -3,8 +3,6 @@ from dataclasses import dataclass
 from string import Template
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.openai import OpenAIResponsesModel, OpenAIResponsesModelSettings
-from collectors import create_wc_collector, create_mc_collector
-
 
 @dataclass
 class CollectorAgents:

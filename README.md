@@ -1,55 +1,38 @@
-# Deployment
-```
-Replace <cluster_id> and <org-namespace> and deploy on Management Cluster
+# Shoot
 
-apiVersion: helm.toolkit.fluxcd.io/v2
-kind: HelmRelease
-metadata:
-  labels:
-    app: shoot
-    application.giantswarm.io/team: phoenix
-    giantswarm.io/cluster: <cluster_id>
-  name: <cluster_id>-shoot
-  namespace: org-giantswarm
-spec:
-  chart:
-    spec:
-      chart: shoot
-      reconcileStrategy: ChartVersion
-      sourceRef:
-        kind: HelmRepository
-        name: <cluster_id>-default-test
-      version: 1.1.2
-  install:
-    createNamespace: true
-    remediation:
-      retries: -1
-  interval: 5m
-  kubeConfig:
-    secretRef:
-      name: <cluster_id>-kubeconfig
-  releaseName: <cluster_id>-shoot
-  storageNamespace: <org-namespace>
-  suspend: false
-  targetNamespace: <org-namespace>
-  timeout: 15m
-  upgrade:
-    remediation:
-      retries: -1
-  valuesFrom:
-    - kind: ConfigMap
-      name: <cluster_id>-cluster-values
-      valuesKey: values
-```
+Kubernetes multi-agent system that helps:
 
-# Test
-Open a shell in the pod and `curl 127.0.0.1:8000/ --data '{"query": "list namespaces"}'`
+- **Automates investigation**: Transforms high-level failure signals into targeted diagnostic reports
+- **Coordinates multi-cluster debugging**: Seamlessly queries both workload and management clusters
+- **Optimizes cost and speed**: Uses powerful reasoning only for coordination, simpler models for data collection
+- **Provides structured output**: Returns concise, actionable diagnostic reports instead of raw data dumps
 
-# How to push latest image
-```
-az login
-az acr login --name gsoci
-docker pull gsoci.azurecr.io/giantswarm/shoot:vX.X.X
-docker tag gsoci.azurecr.io/giantswarm/shoot:vX.X.X gsoci.azurecr.io/giantswarm/shoot:latest
-docker push gsoci.azurecr.io/giantswarm/shoot:latest
+# Architecture
+
+Multi-agent system for Kubernetes E2E debugging:
+
+- **Coordinator Agent**: Orchestrates investigation, synthesizes findings from collectors, generates diagnostic reports. Uses a powerful reasoning model (configurable via `OPENAI_COORDINATOR_MODEL`).
+- **WC Collector Agent**: Collects diagnostic data from the workload cluster via Kubernetes MCP server (`workload_cluster_*` tools).
+- **MC Collector Agent**: Collects diagnostic data from the management cluster via Kubernetes MCP server (`management_cluster_*` tools).
+
+```mermaid
+graph TD
+    User[User Query] --> API[FastAPI Endpoint]
+    API --> Coordinator[Coordinator Agent<br/>High-level reasoning]
+    
+    Coordinator -->|delegates| WC[WC Collector Agent<br/>Workload Cluster]
+    Coordinator -->|delegates| MC[MC Collector Agent<br/>Management Cluster]
+    
+    WC -->|MCP tools| WC_K8s[Workload Cluster<br/>Kubernetes API]
+    MC -->|MCP tools| MC_K8s[Management Cluster<br/>Kubernetes API]
+    
+    WC_K8s -->|data| WC
+    MC_K8s -->|data| MC
+    
+    WC -->|findings| Coordinator
+    MC -->|findings| Coordinator
+    
+    Coordinator -->|synthesizes| Report[Diagnostic Report]
+    Report --> API
+    API --> User
 ```

@@ -48,8 +48,8 @@ spec:
                   key: OPENAI_API_KEY
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: {{ .Values.otelExporterOtlpEndpoint }}
-            - name: OTEL_RESOURCE_ATTRIBUTES
-              value: service.name=shoot
+            - name: OTEL_SERVICE_NAME
+              value: shoot
             - name: KUBECONFIG
               value: /k8s/kubeconfig.yaml
             - name: OPENAI_COORDINATOR_MODEL

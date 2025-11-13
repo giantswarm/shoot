@@ -108,7 +108,7 @@ async def run(request: Request):
         async with wc_tools_context() as wc_tools, mc_tools_context() as mc_tools:
             agent = build_agent(wc_tools, mc_tools)
             result = await agent.ainvoke({"messages": [{"role": "user", "content": query}]})
-        return result
+        return result.messages[-1].content
     except Exception as e:
         import traceback
         detail = str(e)

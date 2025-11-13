@@ -3,3 +3,4 @@ uvicorn
 deepagents
 langchain-mcp-adapters
 langchain-openai
+langsmith[otel]

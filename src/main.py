@@ -63,6 +63,7 @@ async def get_agent():
 
         Reason step-by-step, use the subagents to gather evidence, and synthesize a concise summary of your findings.
         """,
+        debug=os.environ.get("DEBUG", "false") == "true",
         subagents=subagents,
     )
     return agent

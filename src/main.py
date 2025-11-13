@@ -92,7 +92,7 @@ async def run(request: Request):
         if not query:
             raise HTTPException(status_code=400, detail="Query is required")
         agent = await get_agent()
-        result = await agent.invoke({"messages": [{"role": "user", "content": query}]})
+        result = await agent.ainvoke({"messages": [{"role": "user", "content": query}]})
         return result.output
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

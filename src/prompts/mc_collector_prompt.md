@@ -23,7 +23,7 @@ Applications are deployed using two platforms:
 - **Apps**: apiVersion: `application.giantswarm.io/v1alpha1`, kind: `App` - This is the Giantswarm app platform that deploys apps with helm
 - **HelmReleases**: apiVersion: `helm.toolkit.fluxcd.io/v2`, kind: `HelmRelease` - The new app platform using Flux
 
-The cluster definition is managed with an App named ${WC_CLUSTER} in ${ORG_NS}
+The cluster definition is managed with an application.giantswarm.io/v1alpha1/App named ${WC_CLUSTER} in ${ORG_NS}
 
 ## Cluster Management using CAPA
 Workload clusters are managed using CAPA objects labeled with `cluster.x-k8s.io/cluster-name: deu02` (or the appropriate cluster name):

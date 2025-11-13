@@ -1,4 +1,5 @@
 import os
+from string import Template
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -7,6 +8,14 @@ from deepagents import create_deep_agent
 from langchain_mcp_adapters.tools import load_mcp_tools
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+
+def load_prompt(filename: str) -> str:
+    """Load a prompt file and substitute environment variables using ${VAR} placeholders."""
+    base_dir = os.path.join(os.path.dirname(__file__), "prompts")
+    path = os.path.join(base_dir, filename)
+    with open(path, "r", encoding="utf-8") as f:
+        content = f.read()
+    return Template(content).safe_substitute(os.environ)
 
 @asynccontextmanager
 async def wc_tools_context():
@@ -46,14 +55,14 @@ def build_agent(wc_tools, mc_tools):
     wc_subagent = {
         "name": "workload_cluster",
         "description": "This subagent can get data from the workload cluster.",
-        "system_prompt": "Use tools to get data from the workload cluster. Return only the relevant data.",
+        "system_prompt": load_prompt("wc_collector_prompt.md"),
         "tools": wc_tools,
         "model": os.environ.get("OPENAI_COLLECTOR_MODEL", "gpt-5-mini"),
     }
     mc_subagent = {
         "name": "management_cluster",
         "description": "This subagent can get data from the management cluster.",
-        "system_prompt": "Use tools to get data from the management cluster. Return only the relevant data. You only have access to the namespace ${ORG_NS}, you cannot access other namespaces.",
+        "system_prompt": load_prompt("mc_collector_prompt.md"),
         "tools": mc_tools,
         "model": os.environ.get("OPENAI_COLLECTOR_MODEL", "gpt-5-mini"),
     }
@@ -62,15 +71,7 @@ def build_agent(wc_tools, mc_tools):
 
     return create_deep_agent(
         model=os.environ.get("OPENAI_COORDINATOR_MODEL", "gpt-5"),
-        system_prompt="""
-        You are an expert Kubernetes diagnostic agent. Your task is to investigate the issue described by the user and generate a clear, actionable diagnostic report.
-
-        You have two subagents available:
-        - The workload_cluster subagent collects data from the workload cluster.
-        - The management_cluster subagent collects data from the management cluster.
-
-        Reason step-by-step, use the subagents to gather evidence, and synthesize a concise summary of your findings.
-        """,
+        system_prompt=load_prompt("coordinator_prompt.md"),
         debug=os.environ.get("DEBUG", "false") == "true",
         subagents=subagents,
     )

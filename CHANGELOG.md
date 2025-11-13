@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.7.0] - 2025-11-12
+### Changed
+
+- Reorganize source files
+- Log debug via uvicorn logger
 
 ## [2.6.0] - 2025-11-12
 
@@ -15,8 +18,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fix collector model value.
 - Add debug mode.
-
-## [2.5.0] - 2025-11-12
 
 ## [2.4.2] - 2025-11-12
 

@@ -4,7 +4,7 @@ from string import Template
 import anyio
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.openai import OpenAIResponsesModel, OpenAIResponsesModelSettings
-from logging import logger
+from app_logging import logger
 
 @dataclass
 class CollectorAgents:

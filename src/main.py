@@ -1,4 +1,3 @@
-import logging
 from pydantic_ai import Agent
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.trace import TracerProvider
@@ -22,18 +21,6 @@ coordinator = create_coordinator()
 # Create collector agents (these will be passed as dependencies)
 wc_collector = create_wc_collector()
 mc_collector = create_mc_collector()
-
-# Configure logging filter to suppress healthcheck endpoint logs
-class HealthcheckLogFilter(logging.Filter):    
-    def filter(self, record):
-        message = record.getMessage()
-        if "/health" in message or "/ready" in message:
-            return False
-        return True
-
-# Apply the filter to uvicorn access logger
-uvicorn_access_logger = logging.getLogger("uvicorn.access")
-uvicorn_access_logger.addFilter(HealthcheckLogFilter())
 
 # Configure HTTP endpoint
 app = FastAPI(

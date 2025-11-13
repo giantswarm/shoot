@@ -1,5 +1,5 @@
 import os
-from string import Template
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 
@@ -9,33 +9,37 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 
-async def get_wc_mcp_tools():
-    server_params = StdioServerParameters(
+@asynccontextmanager
+async def wc_tools_context():
+    """Yield WC tools while keeping the MCP session open."""
+    params = StdioServerParameters(
         command="/usr/local/bin/mcp-kubernetes",
         args=["serve", "--non-destructive"],
         env={"KUBECONFIG": os.environ.get("KUBECONFIG", "/k8s/kubeconfig.yaml")},
     )
-    async with stdio_client(server_params) as (read, write):
+    async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
-            return await load_mcp_tools(session)
+            tools = await load_mcp_tools(session)
+            yield tools
 
 
-async def get_mc_mcp_tools():
-    server_params = StdioServerParameters(
+@asynccontextmanager
+async def mc_tools_context():
+    """Yield MC tools while keeping the MCP session open."""
+    params = StdioServerParameters(
         command="/usr/local/bin/mcp-kubernetes",
         args=["serve", "--non-destructive", "--in-cluster"],
     )
-    async with stdio_client(server_params) as (read, write):
+    async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
-            return await load_mcp_tools(session)
+            tools = await load_mcp_tools(session)
+            yield tools
 
 
-async def get_agent():
-    wc_tools = await get_wc_mcp_tools()
-    mc_tools = await get_mc_mcp_tools()
-
+def build_agent(wc_tools, mc_tools):
+    """Create the coordinator agent using provided tool sets."""
     wc_subagent = {
         "name": "workload_cluster",
         "description": "This subagent can get data from the workload cluster.",
@@ -53,7 +57,7 @@ async def get_agent():
     
     subagents = [wc_subagent, mc_subagent]
 
-    agent = create_deep_agent(
+    return create_deep_agent(
         model=os.environ.get("OPENAI_COORDINATOR_MODEL", "gpt-5"),
         system_prompt="""
         You are an expert Kubernetes diagnostic agent. Your task is to investigate the issue described by the user and generate a clear, actionable diagnostic report.
@@ -67,7 +71,6 @@ async def get_agent():
         debug=os.environ.get("DEBUG", "false") == "true",
         subagents=subagents,
     )
-    return agent
 
 
 # Configure HTTP endpoint
@@ -97,8 +100,10 @@ async def run(request: Request):
         query = data.get("query")
         if not query:
             raise HTTPException(status_code=400, detail="Query is required")
-        agent = await get_agent()
-        result = await agent.ainvoke({"messages": [{"role": "user", "content": query}]})
+        # Keep both MCP sessions alive with minimal nesting
+        async with wc_tools_context() as wc_tools, mc_tools_context() as mc_tools:
+            agent = build_agent(wc_tools, mc_tools)
+            result = await agent.ainvoke({"messages": [{"role": "user", "content": query}]})
         return result
     except Exception as e:
         import traceback

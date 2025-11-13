@@ -1,26 +1,63 @@
-from pydantic_ai import Agent
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.trace import set_tracer_provider
+import os
+from string import Template
+
 from fastapi import FastAPI, HTTPException, Request
-from coordinator import create_coordinator, CollectorAgents
-from collectors import kubernetes_wc, kubernetes_mc, create_wc_collector, create_mc_collector
 
-# Configure OTEL for logging
-exporter = OTLPSpanExporter()
-span_processor = BatchSpanProcessor(exporter)
-tracer_provider = TracerProvider()
-tracer_provider.add_span_processor(span_processor)
-set_tracer_provider(tracer_provider)
-Agent.instrument_all()
+from langchain.agents import create_agent
+from deepagents.middleware.subagents import SubAgentMiddleware
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from mcp import StdioServerParameters
 
-# Create coordinator agent (which manages collector agents)
-coordinator = create_coordinator()
+async def get_wc_mcp_tools():
+    server_params = StdioServerParameters(
+        command="/usr/local/bin/mcp-kubernetes",
+        args=["serve", "--non-destructive"],
+    )
+    mcp_client = MultiServerMCPClient(server_params)
+    return await mcp_client.get_tools()
 
-# Create collector agents (these will be passed as dependencies)
-wc_collector = create_wc_collector()
-mc_collector = create_mc_collector()
+async def get_mc_mcp_tools():
+    server_params = StdioServerParameters(
+        command="/usr/local/bin/mcp-kubernetes",
+        args=["serve", "--non-destructive", "--in-cluster"],
+    )
+    mcp_client = MultiServerMCPClient(server_params)
+    return await mcp_client.get_tools()
+
+async def get_agent():
+    wc_tools = await get_wc_mcp_tools()
+    mc_tools = await get_mc_mcp_tools()
+    coordinator_prompt = Template(open('prompts/coordinator_prompt.md').read()).safe_substitute(
+        WC_CLUSTER=os.environ.get('WC_CLUSTER', 'workload cluster'),
+        ORG_NS=os.environ.get('ORG_NS', 'organization namespace'),
+    )
+    return create_agent(
+        model=os.environ.get('OPENAI_COORDINATOR_MODEL', 'gpt-5'),
+        system_prompt = coordinator_prompt,
+        middleware=[
+            SubAgentMiddleware(
+                default_model=os.environ.get('OPENAI_COLLECTOR_MODEL', 'gpt-5-mini'),
+                default_tools=wc_tools,
+                subagents=[
+                    {
+                        "name": "workload_cluster",
+                        "description": "This subagent can get data from the workload cluster.",
+                        "system_prompt": "Use tools to get data from the workload cluster.",
+                        "tools": wc_tools,
+                        "model": os.environ.get('OPENAI_COLLECTOR_MODEL', 'gpt-5-mini')
+                    },
+                    {
+                        "name": "management_cluster",
+                        "description": "This subagent can get data from the management cluster.",
+                        "system_prompt": "Use tools to get data from the management cluster.",
+                        "tools": mc_tools,
+                        "model": os.environ.get('OPENAI_COLLECTOR_MODEL', 'gpt-5-mini')
+                    }
+                ],
+            )
+        ],
+    )
+
 
 # Configure HTTP endpoint
 app = FastAPI(
@@ -38,20 +75,7 @@ async def health():
 @app.get("/ready")
 async def ready():
     """Readiness probe - checks if the application is ready to serve traffic."""
-    # Check if critical dependencies are available
-    checks = {
-        "status": "ready",
-        "kubernetes_wc": kubernetes_wc is not None,
-        "kubernetes_mc": kubernetes_mc is not None,
-        "coordinator": coordinator is not None,
-    }
-    
-    # If any critical dependency is missing, return 503
-    if not all([checks["kubernetes_wc"], checks["kubernetes_mc"], checks["coordinator"]]):
-        raise HTTPException(status_code=503, detail=checks)
-    
-    return checks
-
+    return {"status": "ready"}
 
 @app.post("/")
 async def run(request: Request):
@@ -60,8 +84,8 @@ async def run(request: Request):
         query = data.get("query")
         if not query:
             raise HTTPException(status_code=400, detail="Query is required")
-        deps = CollectorAgents(wc_collector=wc_collector, mc_collector=mc_collector)
-        result = await coordinator.run(query, deps=deps)
+        agent = await get_agent()
+        result = await agent.invoke({"messages": [{"role": "user", "content": query}]})
         return result.output
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

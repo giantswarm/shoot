@@ -101,4 +101,7 @@ async def run(request: Request):
         result = await agent.ainvoke({"messages": [{"role": "user", "content": query}]})
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        detail = str(e)
+        tb = traceback.format_exc()
+        raise HTTPException(status_code=500, detail={"error": detail, "traceback": tb})

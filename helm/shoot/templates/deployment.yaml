@@ -50,6 +50,10 @@ spec:
               value: {{ .Values.otelExporterOtlpEndpoint }}
             - name: OTEL_SERVICE_NAME
               value: shoot
+            - name: LANGSMITH_OTEL_ENABLED
+              value: "true"
+            - name: LANGSMITH_TRACING
+              value: "true"
             - name: KUBECONFIG
               value: /k8s/kubeconfig.yaml
             - name: OPENAI_COORDINATOR_MODEL

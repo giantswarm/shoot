@@ -8,7 +8,6 @@ from langchain_mcp_adapters.tools import load_mcp_tools
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-
 @asynccontextmanager
 async def wc_tools_context():
     """Yield WC tools while keeping the MCP session open."""
@@ -54,7 +53,7 @@ def build_agent(wc_tools, mc_tools):
     mc_subagent = {
         "name": "management_cluster",
         "description": "This subagent can get data from the management cluster.",
-        "system_prompt": "Use tools to get data from the management cluster. Return only the relevant data.",
+        "system_prompt": "Use tools to get data from the management cluster. Return only the relevant data. You only have access to the namespace ${ORG_NS}, you cannot access other namespaces.",
         "tools": mc_tools,
         "model": os.environ.get("OPENAI_COLLECTOR_MODEL", "gpt-5-mini"),
     }

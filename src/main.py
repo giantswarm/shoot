@@ -13,6 +13,7 @@ async def get_wc_mcp_tools():
     server_params = StdioServerParameters(
         command="/usr/local/bin/mcp-kubernetes",
         args=["serve", "--non-destructive"],
+        env={"KUBECONFIG": os.environ.get("KUBECONFIG", "/k8s/kubeconfig.yaml")},
     )
     async with stdio_client(server_params) as (read, write):
         async with ClientSession(read, write) as session:

@@ -30,6 +30,10 @@ async def mc_tools_context():
     params = StdioServerParameters(
         command="/usr/local/bin/mcp-kubernetes",
         args=["serve", "--non-destructive", "--in-cluster"],
+        env={
+            "KUBERNETES_SERVICE_HOST": os.environ.get("KUBERNETES_SERVICE_HOST"),
+            "KUBERNETES_SERVICE_PORT": os.environ.get("KUBERNETES_SERVICE_PORT"),
+        },
     )
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:

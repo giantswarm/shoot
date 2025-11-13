@@ -5,24 +5,31 @@ from fastapi import FastAPI, HTTPException, Request
 
 from langchain.agents import create_agent
 from deepagents.middleware.subagents import SubAgentMiddleware
-from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_mcp_adapters.tools import load_mcp_tools
 from mcp import StdioServerParameters
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+
 
 async def get_wc_mcp_tools():
     server_params = StdioServerParameters(
         command="/usr/local/bin/mcp-kubernetes",
         args=["serve", "--non-destructive"],
     )
-    mcp_client = MultiServerMCPClient(server_params)
-    return await mcp_client.get_tools()
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            return await load_mcp_tools(session)
 
 async def get_mc_mcp_tools():
     server_params = StdioServerParameters(
         command="/usr/local/bin/mcp-kubernetes",
         args=["serve", "--non-destructive", "--in-cluster"],
     )
-    mcp_client = MultiServerMCPClient(server_params)
-    return await mcp_client.get_tools()
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            return await load_mcp_tools(session)
 
 async def get_agent():
     wc_tools = await get_wc_mcp_tools()

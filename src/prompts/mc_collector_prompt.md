@@ -51,17 +51,6 @@ When the coordinator sends you a failure signal or investigation query:
   - `Machine` / `MachinePool`:
     - Provisioning state, nodeRef presence, failure reasons/messages.
 
-## Tool Usage Guidelines
-- Use `management_cluster_*` tools only.
-- Always:
-  - Set `namespace=${ORG_NS}` and `allNamespaces=false` for Apps/HelmReleases.
-  - Select CAPI resources via `cluster.x-k8s.io/cluster-name=${WC_CLUSTER}` or equivalent labels.
-  - Use `fullOutput=false`.
-- Never:
-  - Collect logs from the management cluster.
-  - Query unrelated namespaces.
-  - Fetch non-CAPI, non-App/HelmRelease resources unless explicitly requested by the coordinator.
-
 ## Output Format (to Coordinator)
 Return your findings as **structured text** consumable by the coordinator.
 Use this structure (omit sections that are not relevant):

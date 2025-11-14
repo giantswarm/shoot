@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Download and install mcp-kubernetes binary (latest v0.0.35)
-RUN curl -L https://github.com/giantswarm/mcp-kubernetes/releases/download/v0.0.36/mcp-kubernetes_linux_amd64 -o /usr/local/bin/mcp-kubernetes \
+RUN curl -L https://github.com/containers/kubernetes-mcp-server/releases/download/v0.0.54/kubernetes-mcp-server-linux-amd64 -o /usr/local/bin/mcp-kubernetes \
     && chmod +x /usr/local/bin/mcp-kubernetes
 
 # Set working directory

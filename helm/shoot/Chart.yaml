@@ -2,7 +2,7 @@ apiVersion: v2
 name: shoot
 description: A Helm chart for shoot - General purpose agent for Kubernetes
 type: application
-version: 2.8.0
+version: 2.9.0
 appVersion: ""
 home: https://github.com/giantswarm/shoot
 icon: https://raw.githubusercontent.com/kubernetes/kubernetes/master/logo/logo.png

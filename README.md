@@ -42,4 +42,4 @@ graph TD
 # Call the AI endpoint
 
 You can test the Agent by opening a terminal and:
-`curl 127.0.0.1:8000/ --data '{"query": "list namespaces"}'`
+`curl 127.0.0.1:8000/ --data '{"query": "Investigate non-ready deployments"}'`

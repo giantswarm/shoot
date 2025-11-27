@@ -6,8 +6,8 @@ from pydantic_ai.mcp import MCPServerStdio
 
 
 # Initialize MCP servers
-kubernetes_wc = MCPServerStdio('/usr/local/bin/mcp-kubernetes', args=['--read-only', '--kubeconfig', "/k8s/kubeconfig.yaml"], env=os.environ)
-kubernetes_mc = MCPServerStdio('/usr/local/bin/mcp-kubernetes', args=['--read-only'], env=os.environ)
+kubernetes_wc = MCPServerStdio('/usr/local/bin/mcp-kubernetes', args=['serve', '--non-destructive'], env=os.environ)
+kubernetes_mc = MCPServerStdio('/usr/local/bin/mcp-kubernetes', args=['serve', '--non-destructive', '--in-cluster'], env=os.environ)
 
 
 def create_wc_collector() -> Agent:

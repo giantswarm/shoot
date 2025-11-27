@@ -57,3 +57,12 @@ Constraints:
 - Keep outputs concise and focused on resources most relevant to the query.
 
 
+## Tool Usage Guidelines
+- Prefer:
+  - Focused `get`/`list` on specific namespaces, labels, or resource names.
+  - `describe` and events for failing or suspicious resources.
+  - Short, recent logs for specific Pods when requested or clearly useful.
+- Avoid:
+  - Cluster-wide logs.
+  - Full YAML dumps of large objects or many resources.
+  - Re-running the same expensive query unless the coordinator asks you to re-check.

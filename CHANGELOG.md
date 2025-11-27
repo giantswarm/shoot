@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.11.0] - 2025-11-27
 
+### Changed
+
+- Use GS kubernetes MCP
+
 ## [2.10.1] - 2025-11-14
 
 ### Changed
@@ -20,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Use redhact kubernetes MCP
+- Use redhat kubernetes MCP
 
 ## [2.9.0] - 2025-11-14
 

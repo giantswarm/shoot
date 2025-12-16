@@ -1,15 +1,33 @@
-venv/
+# Git
+.git
+.gitignore
+
+# Build artifacts
+bin/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Python (legacy)
+src/
 __pycache__/
 *.pyc
 *.pyo
-*.pyd
-.Python
-*.so
-*.egg
-*.egg-info
-dist/
-build/
-.git/
-.gitignore
-.DS_Store
+*.egg-info/
 
+# Documentation (not needed in container)
+docs/
+*.md
+FINAL_SUMMARY.txt
+
+# Test files
+*_test.go
+testdata/
+
+# CI/CD
+.circleci/
+.github/
+.pre-commit-config.yaml

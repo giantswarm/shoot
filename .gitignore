@@ -2,3 +2,4 @@ venv
 kubeconfig.yaml
 mcp-kubernetes
 app.yaml
+bin/

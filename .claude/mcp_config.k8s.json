@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "kubernetes-mc": {
+      "command": "/usr/local/bin/mcp-kubernetes",
+      "args": ["serve", "--non-destructive", "--in-cluster"],
+      "env": {}
+    }
+  }
+}
+

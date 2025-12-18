@@ -1,32 +1,50 @@
-# Use Python 3.13 slim image as base
-FROM python:3.13-slim
+# Multi-stage build for Go application with Claude CLI
 
-# Install Node.js and bash (required for npx and MCP servers)
-RUN apt-get update && apt-get install -y \
+# Stage 1: Build Go application
+FROM golang:1.23-alpine AS builder
+
+WORKDIR /build
+
+# Copy go mod files
+COPY go.mod go.sum* ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY main.go ./
+
+# Build static binary
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o shoot .
+
+# Stage 2: Runtime image
+FROM alpine:3.19
+
+# Install dependencies
+RUN apk add --no-cache \
+    ca-certificates \
     curl \
-    gnupg \
-    bash \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    bash
 
-# Download and install mcp-kubernetes binary (latest v0.0.35)
+# Install Claude CLI using official install script
+RUN curl -fsSL https://claude.ai/install.sh | bash
+
+# Download and install mcp-kubernetes binary (v0.0.41)
 RUN curl -L https://github.com/giantswarm/mcp-kubernetes/releases/download/v0.0.41/mcp-kubernetes_linux_amd64 -o /usr/local/bin/mcp-kubernetes \
     && chmod +x /usr/local/bin/mcp-kubernetes
 
-# Set working directory
+# Create app directory
 WORKDIR /app
 
-# Copy requirements file
-COPY requirements.txt .
+# Copy Go binary from builder
+COPY --from=builder /build/shoot .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy configuration files
+COPY .claude/ ./.claude/
+COPY prompts/ ./prompts/
 
-# Copy application files
-COPY src/ .
+# Expose port
+EXPOSE 8000
 
 # Run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-
+CMD ["./shoot"]

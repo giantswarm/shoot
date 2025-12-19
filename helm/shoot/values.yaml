@@ -4,7 +4,6 @@
 
 anthropicCoordinatorModel: "claude-sonnet-4-5"
 anthropicCollectorModel: "claude-sonnet-4-5"
-anthropicAPIKey: ""
 otelExporterOtlpEndpoint: "http://otlp-gateway.kube-system.svc.cluster.local:4318"
 otelServiceName: "shoot-agent"
 debug: false

@@ -11,9 +11,6 @@
         "anthropicCollectorModel": {
             "type": "string"
         },
-        "anthropicAPIKey": {
-            "type": "string"
-        },
         "clusterID": {
             "type": "string"
         },

@@ -50,10 +50,10 @@ spec:
               value: {{ .Values.anthropicCoordinatorModel }}
             - name: ANTHROPIC_COLLECTOR_MODEL
               value: {{ .Values.anthropicCollectorModel }}
+            - name: OTEL_METRICS_EXPORTER
+              value: "otlp"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: {{ .Values.otelExporterOtlpEndpoint }}
-            - name: OTEL_TRACES_EXPORTER
-              value: "otlp"
             - name: OTEL_SERVICE_NAME
               value: {{ .Values.otelServiceName }}
             - name: OTEL_RESOURCE_ATTRIBUTES

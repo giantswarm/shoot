@@ -41,6 +41,8 @@ spec:
               containerPort: 8000
               protocol: TCP
           env:
+            - name: HOME
+              value: /home/app
             - name: ANTHROPIC_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -71,6 +73,8 @@ spec:
           volumeMounts:
             - name: kubeconfig
               mountPath: /k8s
+            - name: home
+              mountPath: /home/app
           {{- with .Values.volumeMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -89,6 +93,8 @@ spec:
             items:
               - key: value
                 path: kubeconfig.yaml
+        - name: home
+          emptyDir: {}
       {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}

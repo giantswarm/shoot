@@ -18,6 +18,10 @@ RUN npm install -g @anthropic-ai/claude-code
 RUN curl -L https://github.com/giantswarm/mcp-kubernetes/releases/download/v0.0.98/mcp-kubernetes_linux_amd64 -o /usr/local/bin/mcp-kubernetes \
     && chmod +x /usr/local/bin/mcp-kubernetes
 
+# Create home directory for non-root user (UID 1000)
+# Claude Code CLI needs a writable home directory for .claude.json
+RUN mkdir -p /home/app && chown 1000:1000 /home/app
+
 # Set working directory
 WORKDIR /app
 

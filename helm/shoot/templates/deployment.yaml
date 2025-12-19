@@ -41,21 +41,25 @@ spec:
               containerPort: 8000
               protocol: TCP
           env:
-            - name: OPENAI_API_KEY
+            - name: ANTHROPIC_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: openai-api-key
-                  key: OPENAI_API_KEY
+                  name: anthropic-api-key
+                  key: ANTHROPIC_API_KEY
+            - name: ANTHROPIC_COORDINATOR_MODEL
+              value: {{ .Values.anthropicCoordinatorModel }}
+            - name: ANTHROPIC_COLLECTOR_MODEL
+              value: {{ .Values.anthropicCollectorModel }}
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: {{ .Values.otelExporterOtlpEndpoint }}
+            - name: OTEL_TRACES_EXPORTER
+              value: "otlp"
+            - name: OTEL_SERVICE_NAME
+              value: {{ .Values.otelServiceName }}
             - name: OTEL_RESOURCE_ATTRIBUTES
-              value: service.name=shoot
+              value: service.name={{ .Values.otelServiceName }}
             - name: KUBECONFIG
               value: /k8s/kubeconfig.yaml
-            - name: OPENAI_COORDINATOR_MODEL
-              value: {{ .Values.openaiCoodrinatorModel }}
-            - name: OPENAI_COLLECTOR_MODEL
-              value: {{ .Values.openaiCollectorModel }}
             - name: WC_CLUSTER
               value: {{ .Values.clusterID }}
             - name: ORG_NS

@@ -1,14 +1,17 @@
 # Migration Plan: PydanticAI → Claude Agent Python SDK
 
+## ✅ MIGRATION COMPLETED
+
+This document describes the completed migration from PydanticAI + OpenAI to Claude Agent SDK + Anthropic Claude models.
+
 ## Overview
 
-Migrate the Shoot Kubernetes debugging system from PydanticAI + OpenAI to Claude Agent SDK + Anthropic Claude models while maintaining:
+Migrated the Shoot Kubernetes debugging system while maintaining:
 - Three-agent hierarchical architecture (coordinator + WC collector + MC collector)
 - **Strict separation of concerns**:
-  - Coordinator has NO MCP access (only delegation tools)
+  - Coordinator has NO MCP access (only `Task` tool for delegation)
   - WC collector has ONLY workload cluster MCP access
   - MC collector has ONLY management cluster MCP access
-- Nested agent execution patterns
 - OpenTelemetry observability
 - FastAPI HTTP interface
 
@@ -16,208 +19,153 @@ Migrate the Shoot Kubernetes debugging system from PydanticAI + OpenAI to Claude
 
 | Current (OpenAI) | Target (Claude) | Purpose |
 |------------------|-----------------|---------|
-| Reasoning model (via `OPENAI_COORDINATOR_MODEL`) | `claude-sonnet-4-5` | Coordinator - high-level orchestration and synthesis |
-| `gpt-4o-mini` (default collector) | `claude-3-5-haiku-20241022` | Collectors - fast, efficient data gathering |
+| Reasoning model | `claude-sonnet-4-5` | Coordinator - orchestration and synthesis |
+| `gpt-4o-mini` | `claude-3-5-haiku-20241022` | Collectors - fast data gathering |
 
-**Rationale**: Claude Sonnet 4.5 provides strong reasoning for coordination. Haiku offers fast, cost-effective data collection.
+## Architecture
 
-## New Structure: Claude Settings Folder
+Following the pattern from [anthropics/claude-agent-sdk-demos](https://github.com/anthropics/claude-agent-sdk-demos/blob/main/research-agent/research_agent/agent.py):
 
-Create `/Users/pau/workspace/shoot-main/claude_settings/` directory to house all Claude-specific configuration. This folder may be pulled from a shared company repo in the future for consistent Claude CLI usage across projects.
-
-**Purpose**: Centralize Claude Agent SDK configuration, settings, and any company-specific Claude conventions.
-
-## Critical Files to Modify
-
-1. `/Users/pau/workspace/shoot-main/requirements.txt` - Update dependencies
-2. `/Users/pau/workspace/shoot-main/src/main.py` - Update imports and instrumentation
-3. `/Users/pau/workspace/shoot-main/src/coordinator.py` - Migrate coordinator agent
-4. `/Users/pau/workspace/shoot-main/src/collectors.py` - Migrate collector agents
-5. `/Users/pau/workspace/shoot-main/helm/shoot/templates/deployment.yaml` - Update environment variables
-6. `/Users/pau/workspace/shoot-main/claude_settings/` - Create new folder for Claude configuration
-
-## Step-by-Step Migration
-
-### 1. Update Dependencies (`requirements.txt`)
-
-**Remove**:
 ```
-pydantic-ai-slim[mcp]
-pydantic-ai-slim[openai]
-```
-
-**Add**:
-```
-claude-agent-sdk
-anthropic
+┌─────────────────────────────────────────────────────────────┐
+│                     ClaudeSDKClient                          │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │              Coordinator (Sonnet)                    │    │
+│  │         allowed_tools=["Task"]                       │    │
+│  │              (No MCP access)                         │    │
+│  └──────────────────┬──────────────────┬───────────────┘    │
+│                     │ Task             │ Task               │
+│  ┌──────────────────▼─────┐  ┌────────▼──────────────────┐ │
+│  │   wc_collector (Haiku) │  │   mc_collector (Haiku)    │ │
+│  │   AgentDefinition      │  │   AgentDefinition         │ │
+│  │   tools=WC_MCP_TOOLS   │  │   tools=MC_MCP_TOOLS      │ │
+│  └──────────────────┬─────┘  └────────┬──────────────────┘ │
+│                     │                  │                    │
+│  ┌──────────────────▼─────┐  ┌────────▼──────────────────┐ │
+│  │    kubernetes_wc       │  │    kubernetes_mc          │ │
+│  │    (MCP Server)        │  │    (MCP Server)           │ │
+│  │    Workload Cluster    │  │    Management Cluster     │ │
+│  └────────────────────────┘  └───────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-**Keep**:
-```
-opentelemetry-sdk
-opentelemetry-exporter-otlp
-fastapi
-uvicorn
-anyio
-```
+### Key Components
 
-### 2. Migrate `src/collectors.py`
+1. **ClaudeSDKClient** - Single client session for the entire investigation
+2. **AgentDefinition** - Defines subagents that coordinator delegates to via `Task` tool
+3. **Tool Isolation** - Each AgentDefinition.tools restricts which MCP tools subagent can use
 
-**Key Changes**:
-- Replace `from pydantic_ai import Agent` with `from claude_agent_sdk import Agent`
-- Replace `from pydantic_ai.models.openai import OpenAIResponsesModel` with `from anthropic import Anthropic`
-- Replace `from pydantic_ai.mcp import MCPServerStdio` with Claude Agent SDK MCP equivalent
-- Update agent creation to use Claude models
-- Update MCP server initialization syntax
+### Implementation Pattern
 
-**CRITICAL - MCP Access Isolation**:
-- WC collector agent gets ONLY `kubernetes_wc` MCP server (workload cluster)
-- MC collector agent gets ONLY `kubernetes_mc` MCP server (management cluster)
-- Each collector is isolated to its specific Kubernetes cluster
-- This maintains security boundaries and prevents cross-cluster access
-
-**MCP Integration**:
-- Claude Agent SDK supports MCP via `mcp` module
-- Syntax similar but may have different initialization patterns
-- Need to verify exact API from Claude Agent SDK docs
-
-**Agent Creation Pattern**:
 ```python
-# OLD (PydanticAI)
-collector_model = OpenAIResponsesModel(collector_model_name)
-return Agent(
-    collector_model,
-    toolsets=[kubernetes_wc],
-    system_prompt=system_prompt,
+# collectors.py - Define subagents
+agents = {
+    "wc_collector": AgentDefinition(
+        description="Collect data from WORKLOAD CLUSTER...",
+        prompt=wc_system_prompt,
+        tools=["mcp__kubernetes_wc__get", ...],  # Only WC MCP tools
+        model="haiku"
+    ),
+    "mc_collector": AgentDefinition(
+        description="Collect data from MANAGEMENT CLUSTER...",
+        prompt=mc_system_prompt,
+        tools=["mcp__kubernetes_mc__get", ...],  # Only MC MCP tools
+        model="haiku"
+    ),
+}
+
+# coordinator.py - Configure coordinator
+options = ClaudeAgentOptions(
+    system_prompt=coordinator_prompt,
+    model="sonnet",
+    mcp_servers={
+        "kubernetes_wc": wc_config,
+        "kubernetes_mc": mc_config,
+    },
+    allowed_tools=["Task"],  # Coordinator only delegates
+    agents=agents,
+    permission_mode="bypassPermissions",
 )
 
-# NEW (Claude Agent SDK) - approximate structure
-client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-return Agent(
-    client=client,
-    model="claude-3-5-haiku-20241022",
-    tools=[kubernetes_wc],  # or toolsets, depending on SDK
-    system_prompt=system_prompt,
-)
+# Run investigation
+async with ClaudeSDKClient(options=options) as client:
+    await client.query("Deployment not ready in namespace X")
+    async for message in client.receive_response():
+        # Process response...
 ```
 
-### 3. Migrate `src/coordinator.py`
+## Files Modified
 
-**Key Changes**:
-- Update imports: `pydantic_ai` → `claude_agent_sdk`
-- Replace `OpenAIResponsesModel` and `OpenAIResponsesModelSettings` with Claude equivalents
-- Update model configuration (remove OpenAI-specific settings like `openai_reasoning_effort`)
-- Update `RunContext` import and usage
-- Maintain `CollectorAgents` dataclass structure
-- Keep tool functions (`collect_wc_data`, `collect_mc_data`) with updated context types
+1. ✅ `/requirements.txt` - Updated dependencies
+2. ✅ `/src/main.py` - FastAPI integration
+3. ✅ `/src/coordinator.py` - ClaudeSDKClient with AgentDefinitions
+4. ✅ `/src/collectors.py` - MCP configs and AgentDefinitions
+5. ✅ `/helm/shoot/templates/deployment.yaml` - Anthropic env vars
+6. ✅ `/helm/shoot/values.yaml` - Updated defaults
+7. ✅ `/helm/shoot/values.schema.json` - Updated schema
+8. ✅ `/Dockerfile` - Added Claude Code CLI
+9. ✅ `/claude_settings/` - Created for future config
 
-**CRITICAL - No MCP Access for Coordinator**:
-- Coordinator agent has NO MCP toolsets
-- Coordinator only has two delegation tools: `collect_wc_data` and `collect_mc_data`
-- All Kubernetes access must go through the collector agents
-- This enforces the hierarchical pattern: coordinator orchestrates, collectors execute
+## Environment Variables
 
-**Model Configuration**:
-- Remove OpenAI-specific settings (`openai_reasoning_effort`, `openai_reasoning_summary`)
-- Add Claude-specific settings if available (thinking budget, etc.)
-- For Sonnet 4.5, extended thinking is automatic
-
-**Tool Function Signature**:
-```python
-# Need to update RunContext to Claude Agent SDK equivalent
-async def collect_wc_data(ctx: RunContext[CollectorAgents], query: str) -> str:
-    # Keep nested agent execution pattern with anyio.create_task_group()
-    # Update ctx.deps and ctx.usage to Claude SDK equivalents
-```
-
-### 4. Migrate `src/main.py`
-
-**Key Changes**:
-- Update imports: `from pydantic_ai import Agent` → `from claude_agent_sdk import Agent`
-- Remove `Agent.instrument_all()` - Claude Agent SDK handles OTEL automatically via environment variables
-- Keep FastAPI structure unchanged
-- Update agent instantiation calls
-- Maintain readiness check logic
-
-**OpenTelemetry**:
-- Claude Agent SDK automatically instruments agents when OTEL environment variables are set
-- No manual instrumentation needed - remove the explicit `Agent.instrument_all()` call
-- Keep existing OTEL exporter configuration (lines 11-16) or simplify if not needed
-
-### 5. Update Environment Variables
-
-**In Helm deployment** (`helm/shoot/templates/deployment.yaml`):
-
-**Remove**:
+### Removed (OpenAI)
 - `OPENAI_API_KEY`
 - `OPENAI_COORDINATOR_MODEL`
 - `OPENAI_COLLECTOR_MODEL`
 
-**Add**:
-- `ANTHROPIC_API_KEY` (from secret)
-- `ANTHROPIC_COORDINATOR_MODEL` (default: `claude-sonnet-4-5`)
-- `ANTHROPIC_COLLECTOR_MODEL` (default: `claude-3-5-haiku-20241022`)
+### Added (Anthropic)
+- `ANTHROPIC_API_KEY` - API key from secret
+- `ANTHROPIC_COORDINATOR_MODEL` - Default: `claude-sonnet-4-5`
+- `ANTHROPIC_COLLECTOR_MODEL` - Default: `claude-3-5-haiku-20241022`
 
-**Keep**:
-- `WC_CLUSTER`
-- `ORG_NS`
-- `DEBUG`
-- `KUBECONFIG`
-
-**OpenTelemetry Variables** (per https://code.claude.com/docs/en/monitoring-usage):
+### OpenTelemetry
 - `OTEL_EXPORTER_OTLP_ENDPOINT` - OTLP endpoint URL
-- `OTEL_EXPORTER_OTLP_HEADERS` - Optional headers for authentication
-- `OTEL_SERVICE_NAME` - Service name for traces (e.g., "shoot-agent")
-- `OTEL_TRACES_EXPORTER` - Set to "otlp" to enable tracing
+- `OTEL_TRACES_EXPORTER` - Set to "otlp"
+- `OTEL_SERVICE_NAME` - Service name for traces
 
-## Key API Differences to Address
+## MCP Tool Naming
 
-### 1. Agent Execution
-**PydanticAI**: `result = await agent.run(query, deps=deps)`
-**Claude SDK**: Need to verify exact syntax - likely similar but may return different result object
+Tools from MCP servers follow the pattern: `mcp__<server_name>__<tool_name>`
 
-### 2. Result Object
-**PydanticAI**: `result.output`, `result.all_messages()`, `result.usage`
-**Claude SDK**: Need to identify equivalent properties for:
-- Output extraction
-- Debug message logging
-- Usage tracking
+For `mcp-kubernetes` in non-destructive mode:
+- `mcp__kubernetes_wc__get` - Get a resource
+- `mcp__kubernetes_wc__list` - List resources
+- `mcp__kubernetes_wc__describe` - Describe a resource
+- `mcp__kubernetes_wc__logs` - Get pod logs
+- `mcp__kubernetes_wc__events` - Get events
 
-### 3. Usage Tracking Across Agents
-**PydanticAI**: `await ctx.deps.wc_collector.run(query, usage=ctx.usage)`
-**Claude SDK**: Need to verify if usage can be shared across nested agent calls
+## Deployment
 
-### 4. MCP Server Initialization
-**PydanticAI**: `MCPServerStdio('/usr/local/bin/mcp-kubernetes', args=[...], env=os.environ)`
-**Claude SDK**: Need to check exact MCP integration API
+1. **Create Kubernetes secret**:
+   ```bash
+   kubectl create secret generic anthropic-api-key \
+     --from-literal=ANTHROPIC_API_KEY=<your-key>
+   ```
 
-### 5. Dependencies Injection
-**PydanticAI**: `deps_type=CollectorAgents` parameter in Agent constructor
-**Claude SDK**: Need to verify how to pass dependencies to tools
+2. **Deploy with Helm**:
+   ```bash
+   helm upgrade --install shoot ./helm/shoot \
+     --set clusterID=my-cluster
+   ```
 
-## Migration Risks
+3. **Test**:
+   ```bash
+   curl -X POST http://shoot:8000/ \
+     -H "Content-Type: application/json" \
+     -d '{"query": "Deployment not ready in namespace default"}'
+   ```
 
-1. **API Differences**: Claude Agent SDK may have different APIs for RunContext, usage tracking, or MCP integration
-2. **MCP Support**: Need to verify MCP support is stable in Claude Agent SDK
-3. **Nested Agent Execution**: Cancel scope isolation pattern may work differently
-4. **Model Behavior**: Claude models may produce different output formats - prompts may need adjustment
-5. **Cost**: Need to monitor costs with new models (though Haiku should be cost-effective)
+## Key Differences from Previous Implementation
 
-## Implementation Order
+| Feature | Previous (custom tools) | Current (AgentDefinition) |
+|---------|------------------------|---------------------------|
+| Session | Separate query() calls | Single ClaudeSDKClient |
+| Delegation | @tool decorator | Task tool + AgentDefinition |
+| Isolation | Separate sessions | Tool restrictions |
+| Efficiency | Multiple CLI processes | Single session |
+| Pattern | Custom | Standard SDK pattern |
 
-1. Create `claude_settings/` folder for Claude-specific configuration
-2. Update `requirements.txt`
-3. Migrate `collectors.py` (simpler, no nested agents)
-4. Migrate `coordinator.py` (depends on collectors working)
-5. Update `main.py` (integration layer)
-6. Update Helm deployment environment variables (including OTEL vars)
+## References
 
-## Research Needed Before Implementation
-
-Since this plan was created without access to Claude Agent SDK documentation, we need to research:
-1. Exact Agent class API and initialization
-2. MCP integration API (MCPServer equivalent)
-3. Tool definition and context access patterns
-4. Result object structure and properties
-5. Usage tracking across nested agents
-6. OpenTelemetry instrumentation support
+- [Claude Agent SDK Python Reference](https://platform.claude.com/docs/en/agent-sdk/python)
+- [Research Agent Demo](https://github.com/anthropics/claude-agent-sdk-demos/blob/main/research-agent/research_agent/agent.py)

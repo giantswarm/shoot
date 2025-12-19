@@ -1,81 +1,134 @@
+"""
+Coordinator agent for the multi-agent Kubernetes debugging system.
+
+This module implements the coordinator following the pattern from:
+https://github.com/anthropics/claude-agent-sdk-demos/blob/main/research-agent/
+
+The coordinator:
+1. Receives high-level failure descriptions
+2. Plans the investigation
+3. Delegates to collector subagents via the Task tool
+4. Synthesizes findings into diagnostic reports
+
+IMPORTANT: The coordinator has NO direct MCP/Kubernetes access.
+It can only delegate to collectors via allowed_tools=["Task"].
+"""
+
 import os
-from dataclasses import dataclass
 from string import Template
-import anyio
-from pydantic_ai import Agent, RunContext
-from pydantic_ai.models.openai import OpenAIResponsesModel, OpenAIResponsesModelSettings
+from typing import Any
+
+from claude_agent_sdk import (
+    ClaudeSDKClient,
+    ClaudeAgentOptions,
+    AssistantMessage,
+    TextBlock,
+    ResultMessage,
+)
 from app_logging import logger
-
-@dataclass
-class CollectorAgents:
-    """Dependencies for the coordinator agent."""
-    wc_collector: Agent
-    mc_collector: Agent
-
-
-async def collect_wc_data(ctx: RunContext[CollectorAgents], query: str) -> str:
-    """Collect data from the workload cluster."""
-    # Run nested agent in a separate task group to avoid cancel scope conflicts
-    # This isolates the nested agent's cancel scope from the parent agent's scope
-    result_container = {}
-    async def run_agent():
-        result_container['result'] = await ctx.deps.wc_collector.run(query, usage=ctx.usage)
-    
-    async with anyio.create_task_group() as tg:
-        tg.start_soon(run_agent)
-    # Task group waits for completion before exiting, ensuring result is available
-    
-    # Debug mode: print all messages before returning output
-    if os.environ.get("DEBUG", "").lower() in ("true", "1", "yes"):
-        logger.info("=== DEBUG MODE: WC Collector All Messages ===")
-        logger.info(result_container['result'].all_messages())
-        logger.info("=== End WC Collector Debug Output ===")
-    
-    return result_container['result'].output
+from collectors import (
+    get_wc_mcp_config,
+    get_mc_mcp_config,
+    create_agent_definitions,
+)
 
 
-async def collect_mc_data(ctx: RunContext[CollectorAgents], query: str) -> str:
-    """Collect data from the management cluster."""
-    # Run nested agent in a separate task group to avoid cancel scope conflicts
-    # This isolates the nested agent's cancel scope from the parent agent's scope
-    result_container = {}
-    async def run_agent():
-        result_container['result'] = await ctx.deps.mc_collector.run(query, usage=ctx.usage)
-    
-    async with anyio.create_task_group() as tg:
-        tg.start_soon(run_agent)
-    # Task group waits for completion before exiting, ensuring result is available
-    
-    # Debug mode: print all messages before returning output
-    if os.environ.get("DEBUG", "").lower() in ("true", "1", "yes"):
-        logger.info("=== DEBUG MODE: MC Collector All Messages ===")
-        logger.info(result_container['result'].all_messages())
-        logger.info("=== End MC Collector Debug Output ===")
-    
-    return result_container['result'].output
-
-
-def create_coordinator() -> Agent[CollectorAgents]:
-    """Create the coordinator agent that orchestrates collectors."""
-    # Use powerful model for coordinator (reasoning and synthesis)
-    model = OpenAIResponsesModel(os.environ['OPENAI_COORDINATOR_MODEL'])
-    settings = OpenAIResponsesModelSettings(
-        openai_reasoning_effort='high',
-        openai_reasoning_summary='detailed',
-    )
-    
-    # Load and substitute prompt template
+def _get_coordinator_system_prompt() -> str:
+    """Load and substitute the coordinator system prompt."""
     prompt_template = Template(open('prompts/coordinator_prompt.md').read())
-    system_prompt = prompt_template.safe_substitute(
+    return prompt_template.safe_substitute(
         WC_CLUSTER=os.environ.get('WC_CLUSTER', 'workload cluster'),
         ORG_NS=os.environ.get('ORG_NS', 'organization namespace'),
     )
+
+
+def create_coordinator_options() -> ClaudeAgentOptions:
+    """
+    Create ClaudeAgentOptions for the coordinator.
     
-    return Agent(
-        model,
-        model_settings=settings,
-        system_prompt=system_prompt,
-        tools=[collect_wc_data, collect_mc_data],
-        deps_type=CollectorAgents,
+    Architecture:
+    - Coordinator uses Task tool to delegate to subagents
+    - Two MCP servers configured: kubernetes_wc and kubernetes_mc
+    - Each subagent (via AgentDefinition) is restricted to its own MCP tools
+    - Coordinator itself has NO MCP access (allowed_tools=["Task"] only)
+    """
+    coordinator_model = os.environ.get('ANTHROPIC_COORDINATOR_MODEL', 'claude-sonnet-4-5')
+    
+    return ClaudeAgentOptions(
+        system_prompt=_get_coordinator_system_prompt(),
+        model=coordinator_model,
+        # Configure both MCP servers with distinct names
+        # Tool isolation is enforced via AgentDefinition.tools
+        mcp_servers={
+            "kubernetes_wc": get_wc_mcp_config(),
+            "kubernetes_mc": get_mc_mcp_config(),
+        },
+        # Coordinator can ONLY delegate via Task tool
+        # No direct MCP access - enforces hierarchical pattern
+        allowed_tools=["Task"],
+        # Define collector subagents
+        agents=create_agent_definitions(),
+        # Bypass permission prompts for automated execution
+        permission_mode="bypassPermissions",
     )
 
+
+async def run_coordinator(query_text: str) -> str:
+    """
+    Run the coordinator agent to investigate a Kubernetes issue.
+    
+    Uses ClaudeSDKClient for a single query/response cycle.
+    The coordinator delegates to collector subagents via the Task tool.
+    
+    Args:
+        query_text: High-level failure description (e.g., "Deployment not ready")
+        
+    Returns:
+        Diagnostic report as a string
+    """
+    options = create_coordinator_options()
+    
+    result_text = ""
+    debug_messages: list[Any] = []
+    
+    logger.info(f"Starting investigation: {query_text[:100]}...")
+    
+    async with ClaudeSDKClient(options=options) as client:
+        # Send the investigation query
+        await client.query(query_text)
+        
+        # Process response messages
+        async for message in client.receive_response():
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        result_text += block.text
+                debug_messages.append(message)
+            elif isinstance(message, ResultMessage):
+                if message.is_error:
+                    logger.error(f"Coordinator error: {message.result}")
+                else:
+                    logger.info(
+                        f"Investigation completed in {message.duration_ms}ms, "
+                        f"turns: {message.num_turns}, "
+                        f"cost: ${message.total_cost_usd or 0:.4f}"
+                    )
+    
+    # Debug mode: log all messages
+    if os.environ.get("DEBUG", "").lower() in ("true", "1", "yes"):
+        logger.info("=== DEBUG MODE: Coordinator All Messages ===")
+        for msg in debug_messages:
+            logger.info(msg)
+        logger.info("=== End Coordinator Debug Output ===")
+    
+    return result_text
+
+
+def is_coordinator_ready() -> bool:
+    """Check if the coordinator can be created."""
+    try:
+        create_coordinator_options()
+        return True
+    except Exception as e:
+        logger.error(f"Coordinator not ready: {e}")
+        return False

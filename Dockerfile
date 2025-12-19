@@ -11,7 +11,10 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Download and install mcp-kubernetes binary (latest v0.0.35)
+# Install Claude Code CLI (required by claude-agent-sdk)
+RUN npm install -g @anthropic-ai/claude-code
+
+# Download and install mcp-kubernetes binary (latest v0.0.41)
 RUN curl -L https://github.com/giantswarm/mcp-kubernetes/releases/download/v0.0.41/mcp-kubernetes_linux_amd64 -o /usr/local/bin/mcp-kubernetes \
     && chmod +x /usr/local/bin/mcp-kubernetes
 
@@ -29,4 +32,3 @@ COPY src/ .
 
 # Run the application
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-

@@ -2,10 +2,11 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
-openaiCoodrinatorModel: "gpt-5"
-openaiCollectorModel: "gpt-5-mini"
-openaiAPIKey: ""
+anthropicCoordinatorModel: "claude-sonnet-4-5"
+anthropicCollectorModel: "claude-3-5-haiku-20241022"
+anthropicAPIKey: ""
 otelExporterOtlpEndpoint: "http://otlp-gateway.kube-system.svc.cluster.local:4318"
+otelServiceName: "shoot-agent"
 debug: false
 
 replicaCount: 1

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.11.1] - 2025-12-15
+
+### Fixed
+
+- Add renovate config file.
+
+## [2.11.0] - 2025-11-27
+
+### Changed
+
+- Use GS kubernetes MCP
+
 ## [2.10.1] - 2025-11-14
 
 ### Changed
@@ -18,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Use redhact kubernetes MCP
+- Use redhat kubernetes MCP
 
 ## [2.9.0] - 2025-11-14
 
@@ -104,7 +116,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First release using Pydantic AI and using a single MCP pointing to the
 
 
-[Unreleased]: https://github.com/giantswarm/shoot/compare/v2.10.1...HEAD
+[Unreleased]: https://github.com/giantswarm/shoot/compare/v2.11.1...HEAD
+[2.11.1]: https://github.com/giantswarm/shoot/compare/v2.11.0...v2.11.1
+[2.11.0]: https://github.com/giantswarm/shoot/compare/v2.10.1...v2.11.0
 [2.10.1]: https://github.com/giantswarm/shoot/compare/v2.10.0...v2.10.1
 [2.10.0]: https://github.com/giantswarm/shoot/compare/v2.9.0...v2.10.0
 [2.9.0]: https://github.com/giantswarm/shoot/compare/v2.8.0...v2.9.0

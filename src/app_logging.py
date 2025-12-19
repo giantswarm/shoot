@@ -9,7 +9,19 @@ class HealthcheckLogFilter(logging.Filter):
         return True
 
 # Apply the filter to uvicorn access logger
-logger = logging.getLogger("uvicorn.access")
-logger.addFilter(HealthcheckLogFilter())
+uvicorn_access_logger = logging.getLogger("uvicorn.access")
+uvicorn_access_logger.addFilter(HealthcheckLogFilter())
 
+# Create application logger (separate from uvicorn's access logger)
+# uvicorn.access uses a special formatter that expects HTTP request args,
+# so we use a standard logger for application messages
+logger = logging.getLogger("shoot")
+logger.setLevel(logging.INFO)
 
+# Add handler if not already configured (avoid duplicate logs)
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    ))
+    logger.addHandler(handler)

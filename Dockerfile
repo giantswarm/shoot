@@ -1,5 +1,5 @@
 # Use Python 3.13 slim image as base
-FROM python:3.13-slim
+FROM python:3.14-slim
 
 # Install Node.js and bash (required for npx and MCP servers)
 RUN apt-get update && apt-get install -y \

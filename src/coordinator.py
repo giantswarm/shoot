@@ -14,8 +14,6 @@ IMPORTANT: The coordinator has NO direct MCP/Kubernetes access.
 It can only delegate to collectors via allowed_tools=["Task"].
 """
 
-import os
-from string import Template
 from typing import Any, AsyncGenerator
 
 from claude_agent_sdk import (
@@ -31,28 +29,9 @@ from collectors import (
     get_mc_mcp_config,
     create_agent_definitions,
 )
+from config import get_settings, get_coordinator_prompt
 from telemetry import trace_operation, add_event, set_span_attribute
 from schemas import parse_markdown_report, DiagnosticReport
-
-
-# =============================================================================
-# Configuration
-# =============================================================================
-
-# Default timeout for investigations (5 minutes)
-DEFAULT_TIMEOUT_SECONDS = int(os.environ.get('SHOOT_TIMEOUT_SECONDS', '300'))
-
-# Maximum conversation turns to prevent infinite loops
-DEFAULT_MAX_TURNS = int(os.environ.get('SHOOT_MAX_TURNS', '15'))
-
-
-def _get_coordinator_system_prompt() -> str:
-    """Load and substitute the coordinator system prompt."""
-    prompt_template = Template(open('prompts/coordinator_prompt.md').read())
-    return prompt_template.safe_substitute(
-        WC_CLUSTER=os.environ.get('WC_CLUSTER', 'workload cluster'),
-        ORG_NS=os.environ.get('ORG_NS', 'organization namespace'),
-    )
 
 
 def create_coordinator_options(
@@ -61,22 +40,22 @@ def create_coordinator_options(
 ) -> ClaudeAgentOptions:
     """
     Create ClaudeAgentOptions for the coordinator.
-    
+
     Architecture:
     - Coordinator uses Task tool to delegate to subagents
     - Two MCP servers configured: kubernetes_wc and kubernetes_mc
     - Each subagent (via AgentDefinition) is restricted to its own MCP tools
     - Coordinator itself has NO MCP access (allowed_tools=["Task"] only)
-    
+
     Args:
-        timeout_seconds: Maximum time for investigation (default: 300s)
-        max_turns: Maximum conversation turns (default: 15)
+        timeout_seconds: Maximum time for investigation (default from config)
+        max_turns: Maximum conversation turns (default from config)
     """
-    coordinator_model = os.environ.get('ANTHROPIC_COORDINATOR_MODEL', 'claude-sonnet-4-5')
-    
+    settings = get_settings()
+
     return ClaudeAgentOptions(
-        system_prompt=_get_coordinator_system_prompt(),
-        model=coordinator_model,
+        system_prompt=get_coordinator_prompt(),
+        model=settings.coordinator_model,
         # Configure both MCP servers with distinct names
         # Tool isolation is enforced via AgentDefinition.tools
         mcp_servers={
@@ -91,8 +70,8 @@ def create_coordinator_options(
         # Bypass permission prompts for automated execution
         permission_mode="bypassPermissions",
         # Timeout and turn limits to prevent runaway investigations
-        timeout_seconds=timeout_seconds or DEFAULT_TIMEOUT_SECONDS,
-        max_turns=max_turns or DEFAULT_MAX_TURNS,
+        timeout_seconds=timeout_seconds or settings.timeout_seconds,
+        max_turns=max_turns or settings.max_turns,
     )
 
 
@@ -103,22 +82,24 @@ async def run_coordinator(
 ) -> str:
     """
     Run the coordinator agent to investigate a Kubernetes issue.
-    
+
     Uses ClaudeSDKClient for a single query/response cycle.
     The coordinator delegates to collector subagents via the Task tool.
-    
+
     Args:
         query_text: High-level failure description (e.g., "Deployment not ready")
         timeout_seconds: Optional timeout override
         max_turns: Optional max turns override
-        
+
     Returns:
         Diagnostic report as a string
     """
+    settings = get_settings()
+
     with trace_operation("coordinator.investigate", {
         "query": query_text[:200],
-        "timeout_seconds": timeout_seconds or DEFAULT_TIMEOUT_SECONDS,
-        "max_turns": max_turns or DEFAULT_MAX_TURNS,
+        "timeout_seconds": timeout_seconds or settings.timeout_seconds,
+        "max_turns": max_turns or settings.max_turns,
     }) as span:
         options = create_coordinator_options(timeout_seconds, max_turns)
         
@@ -159,7 +140,7 @@ async def run_coordinator(
                         set_span_attribute("cost_usd", message.total_cost_usd or 0)
         
         # Debug mode: log all messages
-        if os.environ.get("DEBUG", "").lower() in ("true", "1", "yes"):
+        if settings.debug:
             logger.info("=== DEBUG MODE: Coordinator All Messages ===")
             for msg in debug_messages:
                 logger.info(msg)

@@ -5,3 +5,4 @@ opentelemetry-exporter-otlp
 fastapi
 uvicorn
 anyio
+pydantic-settings

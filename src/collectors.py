@@ -3,15 +3,15 @@ Collector configuration for the multi-agent Kubernetes debugging system.
 
 This module provides:
 - MCP server configurations for workload and management clusters
-- System prompts for collector agents
 - AgentDefinitions for use with ClaudeSDKClient
+- Pre-flight validation for configuration
 """
 
-import os
-from string import Template
 from typing import Any
 
 from claude_agent_sdk import AgentDefinition
+
+from config import get_settings, get_wc_collector_prompt, get_mc_collector_prompt
 
 
 # =============================================================================
@@ -21,20 +21,21 @@ from claude_agent_sdk import AgentDefinition
 def get_wc_mcp_config() -> dict[str, Any]:
     """
     Get MCP server configuration for workload cluster.
-    
+
     Uses KUBECONFIG environment variable to connect to the workload cluster.
     """
+    settings = get_settings()
     return {
         "command": "/usr/local/bin/mcp-kubernetes",
         "args": ["serve", "--non-destructive"],
-        "env": {"KUBECONFIG": os.environ.get("KUBECONFIG", "")}
+        "env": {"KUBECONFIG": settings.kubeconfig}
     }
 
 
 def get_mc_mcp_config() -> dict[str, Any]:
     """
     Get MCP server configuration for management cluster.
-    
+
     Uses --in-cluster mode to connect to the management cluster
     where this pod is running.
     """
@@ -42,27 +43,6 @@ def get_mc_mcp_config() -> dict[str, Any]:
         "command": "/usr/local/bin/mcp-kubernetes",
         "args": ["serve", "--non-destructive", "--in-cluster"]
     }
-
-
-# =============================================================================
-# System Prompts
-# =============================================================================
-
-def _get_wc_system_prompt() -> str:
-    """Load and substitute the WC collector system prompt."""
-    prompt_template = Template(open('prompts/wc_collector_prompt.md').read())
-    return prompt_template.safe_substitute(
-        WC_CLUSTER=os.environ.get('WC_CLUSTER', 'workload cluster'),
-    )
-
-
-def _get_mc_system_prompt() -> str:
-    """Load and substitute the MC collector system prompt."""
-    prompt_template = Template(open('prompts/mc_collector_prompt.md').read())
-    return prompt_template.safe_substitute(
-        WC_CLUSTER=os.environ.get('WC_CLUSTER', 'workload cluster'),
-        ORG_NS=os.environ.get('ORG_NS', 'organization namespace'),
-    )
 
 
 # =============================================================================
@@ -92,15 +72,15 @@ MC_MCP_TOOLS = [
 def create_agent_definitions() -> dict[str, AgentDefinition]:
     """
     Create AgentDefinitions for the collector subagents.
-    
+
     These are used with ClaudeSDKClient to define specialized subagents
     that the coordinator can delegate to via the Task tool.
-    
+
     IMPORTANT: Each collector is restricted to only its own MCP server's tools
     to maintain strict isolation between workload and management clusters.
     """
-    collector_model = os.environ.get('ANTHROPIC_COLLECTOR_MODEL', 'claude-3-5-haiku-20241022')
-    
+    settings = get_settings()
+
     return {
         "wc_collector": AgentDefinition(
             description=(
@@ -110,9 +90,9 @@ def create_agent_definitions() -> dict[str, AgentDefinition]:
                 "workload cluster. Use this as your PRIMARY data source for debugging. "
                 "This agent does NOT have access to management cluster resources."
             ),
-            prompt=_get_wc_system_prompt(),
+            prompt=get_wc_collector_prompt(),
             tools=WC_MCP_TOOLS,  # Strict isolation: only WC MCP tools
-            model=collector_model,
+            model=settings.collector_model,
         ),
         "mc_collector": AgentDefinition(
             description=(
@@ -122,9 +102,9 @@ def create_agent_definitions() -> dict[str, AgentDefinition]:
                 "workload cluster. Use this ONLY when you need to check deployment status or "
                 "cluster infrastructure. This agent does NOT have access to workload cluster resources."
             ),
-            prompt=_get_mc_system_prompt(),
+            prompt=get_mc_collector_prompt(),
             tools=MC_MCP_TOOLS,  # Strict isolation: only MC MCP tools
-            model=collector_model,
+            model=settings.collector_model,
         ),
     }
 
@@ -139,10 +119,112 @@ def get_mcp_configs_valid() -> tuple[bool, bool]:
         wc_valid = get_wc_mcp_config() is not None
     except Exception:
         wc_valid = False
-    
+
     try:
         mc_valid = get_mc_mcp_config() is not None
     except Exception:
         mc_valid = False
-    
+
     return wc_valid, mc_valid
+
+
+def validate_wc_config() -> tuple[bool, str]:
+    """
+    Validate workload cluster configuration.
+
+    Checks that KUBECONFIG is set and the file exists.
+
+    Returns:
+        Tuple of (is_valid, error_message). If valid, error_message is empty.
+    """
+    import os
+    settings = get_settings()
+
+    if not settings.kubeconfig:
+        return False, "KUBECONFIG environment variable not set"
+
+    if not os.path.isfile(settings.kubeconfig):
+        return False, f"KUBECONFIG file not found: {settings.kubeconfig}"
+
+    return True, ""
+
+
+def validate_mc_config() -> tuple[bool, str]:
+    """
+    Validate management cluster configuration (in-cluster mode).
+
+    Checks that the service account token is mounted (indicates running in-cluster).
+
+    Returns:
+        Tuple of (is_valid, error_message). If valid, error_message is empty.
+    """
+    import os
+
+    # In-cluster mode uses the service account token mounted at this path
+    sa_token_path = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+
+    if os.path.isfile(sa_token_path):
+        return True, ""
+
+    # Not running in-cluster - this is acceptable for local development
+    return True, "Not running in-cluster (service account token not found)"
+
+
+def validate_anthropic_api_key() -> tuple[bool, str]:
+    """
+    Validate that the Anthropic API key is configured.
+
+    Returns:
+        Tuple of (is_valid, error_message). If valid, error_message is empty.
+    """
+    settings = get_settings()
+
+    if not settings.anthropic_api_key:
+        return False, "ANTHROPIC_API_KEY environment variable not set"
+
+    # Basic format validation (API keys start with "sk-ant-")
+    if not settings.anthropic_api_key.startswith("sk-ant-"):
+        return False, "ANTHROPIC_API_KEY does not appear to be a valid Anthropic API key"
+
+    return True, ""
+
+
+def validate_mcp_binary() -> tuple[bool, str]:
+    """
+    Validate that the MCP kubernetes binary exists.
+
+    Returns:
+        Tuple of (is_valid, error_message). If valid, error_message is empty.
+    """
+    import os
+
+    mcp_path = "/usr/local/bin/mcp-kubernetes"
+    if os.path.isfile(mcp_path) and os.access(mcp_path, os.X_OK):
+        return True, ""
+
+    return False, f"MCP kubernetes binary not found or not executable: {mcp_path}"
+
+
+def run_preflight_checks() -> dict[str, dict[str, Any]]:
+    """
+    Run all pre-flight validation checks.
+
+    Returns a dictionary with check results:
+    {
+        "wc_config": {"valid": bool, "error": str},
+        "mc_config": {"valid": bool, "error": str},
+        "anthropic_api": {"valid": bool, "error": str},
+        "mcp_binary": {"valid": bool, "error": str},
+    }
+    """
+    wc_valid, wc_error = validate_wc_config()
+    mc_valid, mc_error = validate_mc_config()
+    api_valid, api_error = validate_anthropic_api_key()
+    mcp_valid, mcp_error = validate_mcp_binary()
+
+    return {
+        "wc_config": {"valid": wc_valid, "error": wc_error},
+        "mc_config": {"valid": mc_valid, "error": mc_error},
+        "anthropic_api": {"valid": api_valid, "error": api_error},
+        "mcp_binary": {"valid": mcp_valid, "error": mcp_error},
+    }

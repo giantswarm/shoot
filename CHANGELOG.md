@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Centralized configuration with Pydantic BaseSettings (`config.py`)
+- Prompt caching at module load time for faster response times
+- Pre-flight configuration validation (`/ready?deep=true`) - checks kubeconfig, API key, MCP binary
+- Request ID tracking for all API requests
+- HTTP-level timeout handling with 504 response on timeout
+- Structured error responses with request ID for debugging
+
+### Changed
+
+- Improved `/ready` endpoint with optional deep configuration checks
+- All configuration now loaded from centralized `Settings` class
+- Prompts are now cached at startup instead of read on each request
+- Better error messages with request ID for traceability
+
+### Dependencies
+
+- Added `pydantic-settings` for configuration management
+
 ## [2.11.1] - 2025-12-15
 
 ### Fixed
@@ -116,7 +136,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First release using Pydantic AI and using a single MCP pointing to the
 
 
-[Unreleased]: https://github.com/giantswarm/shoot/compare/v2.11.1...HEAD
+[Unreleased]: https://github.com/giantswarm/shoot/compare/v2.12.0...HEAD
+[2.12.0]: https://github.com/giantswarm/shoot/compare/v2.11.1...v2.12.0
 [2.11.1]: https://github.com/giantswarm/shoot/compare/v2.11.0...v2.11.1
 [2.11.0]: https://github.com/giantswarm/shoot/compare/v2.10.1...v2.11.0
 [2.10.1]: https://github.com/giantswarm/shoot/compare/v2.10.0...v2.10.1

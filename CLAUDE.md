@@ -9,8 +9,14 @@ Shoot is a multi-agent Kubernetes debugging system built with Python and the Cla
 ## Development Commands
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Create virtualenv and install dependencies (using uv)
+uv venv .venv
+uv pip install -r requirements.txt
+uv pip install pre-commit black flake8 mypy bandit  # dev dependencies
+source .venv/bin/activate
+
+# Install pre-commit hooks
+pre-commit install
 
 # Run the FastAPI server locally
 uvicorn src.main:app --reload --port 8000
@@ -63,12 +69,59 @@ Required environment variables:
 - `KUBECONFIG` - Path to workload cluster kubeconfig
 
 Optional:
+- `MC_KUBECONFIG` - Path to management cluster kubeconfig (uses in-cluster mode if not set)
+- `MCP_KUBERNETES_PATH` - Path to mcp-kubernetes binary (default: `/usr/local/bin/mcp-kubernetes`)
 - `ANTHROPIC_COORDINATOR_MODEL` (default: `claude-sonnet-4-5-20250514`)
 - `ANTHROPIC_COLLECTOR_MODEL` (default: `claude-3-5-haiku-20241022`)
 - `SHOOT_TIMEOUT_SECONDS` (default: 300, range: 30-600)
 - `SHOOT_MAX_TURNS` (default: 15, range: 5-50)
 - `OTEL_EXPORTER_OTLP_ENDPOINT` - For telemetry
 - `WC_CLUSTER`, `ORG_NS` - Cluster context for prompts
+
+## Local Development
+
+### Option 1: Docker (recommended, matches production)
+
+```bash
+# Setup local_config folder with templates
+make -f Makefile.local.mk local-setup
+
+# Login to clusters via Teleport and create kubeconfigs
+# For separate MC and WC clusters:
+make -f Makefile.local.mk local-kubeconfig MC=<management-cluster> WC=<workload-cluster>
+
+# Or use same cluster for both MC and WC:
+make -f Makefile.local.mk local-kubeconfig MC=<cluster>
+
+# Edit local_config/.env with your ANTHROPIC_API_KEY
+
+# Build and run
+make -f Makefile.local.mk docker-build
+make -f Makefile.local.mk docker-run
+```
+
+### Option 2: Native Python (faster iteration)
+
+```bash
+# Setup local_config folder and download mcp-kubernetes binary
+make -f Makefile.local.mk local-setup
+make -f Makefile.local.mk local-mcp
+
+# Login to clusters via Teleport
+make -f Makefile.local.mk local-kubeconfig MC=<cluster>
+
+# Edit local_config/.env with your ANTHROPIC_API_KEY
+
+# Run (automatically creates venv and installs deps)
+make -f Makefile.local.mk local-run
+```
+
+### Test the setup
+
+```bash
+curl http://localhost:8000/ready?deep=true
+curl http://localhost:8000/ -d '{"query": "List namespaces"}'
+```
 
 ## Code Style
 

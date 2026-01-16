@@ -48,7 +48,8 @@ def create_coordinator_options(
     - Coordinator itself has NO MCP access (allowed_tools=["Task"] only)
 
     Args:
-        timeout_seconds: Maximum time for investigation (default from config)
+        timeout_seconds: Maximum time for investigation (used for HTTP timeouts
+                        and logging, not passed to SDK)
         max_turns: Maximum conversation turns (default from config)
     """
     settings = get_settings()
@@ -59,8 +60,8 @@ def create_coordinator_options(
         # Configure both MCP servers with distinct names
         # Tool isolation is enforced via AgentDefinition.tools
         mcp_servers={
-            "kubernetes_wc": get_wc_mcp_config(),
-            "kubernetes_mc": get_mc_mcp_config(),
+            "kubernetes_wc": get_wc_mcp_config(),  # type: ignore[dict-item]
+            "kubernetes_mc": get_mc_mcp_config(),  # type: ignore[dict-item]
         },
         # Coordinator can ONLY delegate via Task tool
         # No direct MCP access - enforces hierarchical pattern
@@ -69,8 +70,7 @@ def create_coordinator_options(
         agents=create_agent_definitions(),
         # Bypass permission prompts for automated execution
         permission_mode="bypassPermissions",
-        # Timeout and turn limits to prevent runaway investigations
-        timeout_seconds=timeout_seconds or settings.timeout_seconds,
+        # Turn limits to prevent runaway investigations
         max_turns=max_turns or settings.max_turns,
     )
 
@@ -96,23 +96,26 @@ async def run_coordinator(
     """
     settings = get_settings()
 
-    with trace_operation("coordinator.investigate", {
-        "query": query_text[:200],
-        "timeout_seconds": timeout_seconds or settings.timeout_seconds,
-        "max_turns": max_turns or settings.max_turns,
-    }) as span:
+    with trace_operation(
+        "coordinator.investigate",
+        {
+            "query": query_text[:200],
+            "timeout_seconds": timeout_seconds or settings.timeout_seconds,
+            "max_turns": max_turns or settings.max_turns,
+        },
+    ) as _span:  # noqa: F841
         options = create_coordinator_options(timeout_seconds, max_turns)
-        
+
         result_text = ""
         debug_messages: list[Any] = []
-        
+
         logger.info(f"Starting investigation: {query_text[:100]}...")
         add_event("investigation_started", {"query_length": len(query_text)})
-        
+
         async with ClaudeSDKClient(options=options) as client:
             # Send the investigation query
             await client.query(query_text)
-            
+
             # Process response messages
             turn_count = 0
             async for message in client.receive_response():
@@ -138,14 +141,14 @@ async def run_coordinator(
                         set_span_attribute("duration_ms", message.duration_ms)
                         set_span_attribute("num_turns", message.num_turns)
                         set_span_attribute("cost_usd", message.total_cost_usd or 0)
-        
+
         # Debug mode: log all messages
         if settings.debug:
             logger.info("=== DEBUG MODE: Coordinator All Messages ===")
             for msg in debug_messages:
                 logger.info(msg)
             logger.info("=== End Coordinator Debug Output ===")
-        
+
         # Try to parse structured output
         parsed_report = parse_markdown_report(result_text)
         if parsed_report:
@@ -153,7 +156,7 @@ async def run_coordinator(
             set_span_attribute("output.summary_items", len(parsed_report.summary))
         else:
             set_span_attribute("output.structured", False)
-        
+
         return result_text
 
 
@@ -164,30 +167,36 @@ async def run_coordinator_streaming(
 ) -> AsyncGenerator[str, None]:
     """
     Run the coordinator agent with streaming response.
-    
+
     Yields text chunks as they are received, providing real-time feedback
     during long investigations.
-    
+
     Args:
         query_text: High-level failure description
         timeout_seconds: Optional timeout override
         max_turns: Optional max turns override
-        
+
     Yields:
         Text chunks as they are generated
     """
-    with trace_operation("coordinator.investigate.streaming", {
-        "query": query_text[:200],
-        "streaming": True,
-    }) as span:
+    with trace_operation(
+        "coordinator.investigate.streaming",
+        {
+            "query": query_text[:200],
+            "streaming": True,
+        },
+    ) as _span:  # noqa: F841
         options = create_coordinator_options(timeout_seconds, max_turns)
-        
+
         logger.info(f"Starting streaming investigation: {query_text[:100]}...")
-        add_event("investigation_started", {"query_length": len(query_text), "streaming": True})
-        
+        add_event(
+            "investigation_started",
+            {"query_length": len(query_text), "streaming": True},
+        )
+
         async with ClaudeSDKClient(options=options) as client:
             await client.query(query_text)
-            
+
             turn_count = 0
             async for message in client.receive_response():
                 if isinstance(message, AssistantMessage):
@@ -214,7 +223,7 @@ async def run_coordinator_streaming(
 def get_structured_report(result_text: str) -> DiagnosticReport | None:
     """
     Attempt to parse the coordinator's text output into a structured report.
-    
+
     Returns None if the output doesn't match the expected format.
     """
     return parse_markdown_report(result_text)

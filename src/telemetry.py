@@ -26,6 +26,7 @@ from opentelemetry.trace import Status, StatusCode, Span
 # Conditionally import OTLP exporter (may not be available in all environments)
 try:
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+
     OTLP_AVAILABLE = True
 except ImportError:
     OTLP_AVAILABLE = False
@@ -34,22 +35,22 @@ except ImportError:
 def init_telemetry() -> trace.Tracer:
     """
     Initialize OpenTelemetry tracing.
-    
+
     Returns a tracer instance configured based on environment variables.
     If OTEL_EXPORTER_OTLP_ENDPOINT is set, uses OTLP exporter.
     Otherwise, uses console exporter for local development.
     """
     service_name = os.environ.get("OTEL_SERVICE_NAME", "shoot")
-    
+
     # Create resource with service name
     resource = Resource.create({SERVICE_NAME: service_name})
-    
+
     # Create tracer provider
     provider = TracerProvider(resource=resource)
-    
+
     # Configure exporter based on environment
     otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
-    
+
     if otlp_endpoint and OTLP_AVAILABLE:
         # Production: OTLP exporter
         exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
@@ -58,10 +59,10 @@ def init_telemetry() -> trace.Tracer:
         # Development: Console exporter
         provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
     # else: No exporter (tracing disabled but API still works)
-    
+
     # Set global tracer provider
     trace.set_tracer_provider(provider)
-    
+
     return trace.get_tracer(__name__)
 
 
@@ -79,12 +80,11 @@ def get_tracer() -> trace.Tracer:
 
 @contextmanager
 def trace_operation(
-    name: str,
-    attributes: dict[str, Any] | None = None
+    name: str, attributes: dict[str, Any] | None = None
 ) -> Generator[Span, None, None]:
     """
     Context manager for tracing an operation.
-    
+
     Usage:
         with trace_operation("coordinator.investigate", {"query": query}) as span:
             # ... do work ...

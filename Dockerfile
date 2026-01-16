@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y \
 RUN npm install -g @anthropic-ai/claude-code
 
 # Download and install mcp-kubernetes binary
-RUN curl -L https://github.com/giantswarm/mcp-kubernetes/releases/download/v0.0.98/mcp-kubernetes_linux_amd64 -o /usr/local/bin/mcp-kubernetes \
+RUN curl -L https://github.com/giantswarm/mcp-kubernetes/releases/download/v0.0.122/mcp-kubernetes_linux_amd64 -o /usr/local/bin/mcp-kubernetes \
     && chmod +x /usr/local/bin/mcp-kubernetes
 
 # Create home directory for non-root user (UID 1000)

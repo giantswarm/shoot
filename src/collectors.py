@@ -18,6 +18,7 @@ from config import get_settings, get_wc_collector_prompt, get_mc_collector_promp
 # MCP Server Configurations
 # =============================================================================
 
+
 def get_wc_mcp_config() -> dict[str, Any]:
     """
     Get MCP server configuration for workload cluster.
@@ -26,9 +27,9 @@ def get_wc_mcp_config() -> dict[str, Any]:
     """
     settings = get_settings()
     return {
-        "command": "/usr/local/bin/mcp-kubernetes",
+        "command": settings.mcp_kubernetes_path,
         "args": ["serve", "--non-destructive"],
-        "env": {"KUBECONFIG": settings.kubeconfig}
+        "env": {"KUBECONFIG": settings.kubeconfig},
     }
 
 
@@ -36,13 +37,24 @@ def get_mc_mcp_config() -> dict[str, Any]:
     """
     Get MCP server configuration for management cluster.
 
-    Uses --in-cluster mode to connect to the management cluster
-    where this pod is running.
+    Uses MC_KUBECONFIG if set (local development),
+    otherwise uses --in-cluster mode (production).
     """
-    return {
-        "command": "/usr/local/bin/mcp-kubernetes",
-        "args": ["serve", "--non-destructive", "--in-cluster"]
-    }
+    settings = get_settings()
+
+    if settings.mc_kubeconfig:
+        # Local development: use kubeconfig file
+        return {
+            "command": settings.mcp_kubernetes_path,
+            "args": ["serve", "--non-destructive"],
+            "env": {"KUBECONFIG": settings.mc_kubeconfig},
+        }
+    else:
+        # Production: use in-cluster service account
+        return {
+            "command": settings.mcp_kubernetes_path,
+            "args": ["serve", "--non-destructive", "--in-cluster"],
+        }
 
 
 # =============================================================================
@@ -54,7 +66,7 @@ def get_mc_mcp_config() -> dict[str, Any]:
 # Tool naming convention: mcp__<server_name>__<tool_name>
 WC_MCP_TOOLS = [
     "mcp__kubernetes_wc__get",
-    "mcp__kubernetes_wc__list", 
+    "mcp__kubernetes_wc__list",
     "mcp__kubernetes_wc__describe",
     "mcp__kubernetes_wc__logs",
     "mcp__kubernetes_wc__events",
@@ -92,7 +104,7 @@ def create_agent_definitions() -> dict[str, AgentDefinition]:
             ),
             prompt=get_wc_collector_prompt(),
             tools=WC_MCP_TOOLS,  # Strict isolation: only WC MCP tools
-            model=settings.collector_model,
+            model=settings.collector_model,  # type: ignore[arg-type]
         ),
         "mc_collector": AgentDefinition(
             description=(
@@ -104,7 +116,7 @@ def create_agent_definitions() -> dict[str, AgentDefinition]:
             ),
             prompt=get_mc_collector_prompt(),
             tools=MC_MCP_TOOLS,  # Strict isolation: only MC MCP tools
-            model=settings.collector_model,
+            model=settings.collector_model,  # type: ignore[arg-type]
         ),
     }
 
@@ -112,6 +124,7 @@ def create_agent_definitions() -> dict[str, AgentDefinition]:
 # =============================================================================
 # Readiness Checks
 # =============================================================================
+
 
 def get_mcp_configs_valid() -> tuple[bool, bool]:
     """Check if MCP configurations are valid (configs can be created)."""
@@ -138,6 +151,7 @@ def validate_wc_config() -> tuple[bool, str]:
         Tuple of (is_valid, error_message). If valid, error_message is empty.
     """
     import os
+
     settings = get_settings()
 
     if not settings.kubeconfig:
@@ -151,23 +165,33 @@ def validate_wc_config() -> tuple[bool, str]:
 
 def validate_mc_config() -> tuple[bool, str]:
     """
-    Validate management cluster configuration (in-cluster mode).
+    Validate management cluster configuration.
 
-    Checks that the service account token is mounted (indicates running in-cluster).
+    Checks either MC_KUBECONFIG file exists (local) or
+    service account token is mounted (in-cluster).
 
     Returns:
         Tuple of (is_valid, error_message). If valid, error_message is empty.
     """
     import os
 
-    # In-cluster mode uses the service account token mounted at this path
-    sa_token_path = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+    settings = get_settings()
 
+    # Local mode: check kubeconfig file
+    if settings.mc_kubeconfig:
+        if not os.path.isfile(settings.mc_kubeconfig):
+            return False, f"MC_KUBECONFIG file not found: {settings.mc_kubeconfig}"
+        return True, ""
+
+    # Production mode: check for in-cluster token
+    sa_token_path = "/var/run/secrets/kubernetes.io/serviceaccount/token"  # nosec B105
     if os.path.isfile(sa_token_path):
         return True, ""
 
-    # Not running in-cluster - this is acceptable for local development
-    return True, "Not running in-cluster (service account token not found)"
+    return (
+        True,
+        "Not running in-cluster (service account token not found), MC_KUBECONFIG not set",
+    )
 
 
 def validate_anthropic_api_key() -> tuple[bool, str]:
@@ -184,7 +208,10 @@ def validate_anthropic_api_key() -> tuple[bool, str]:
 
     # Basic format validation (API keys start with "sk-ant-")
     if not settings.anthropic_api_key.startswith("sk-ant-"):
-        return False, "ANTHROPIC_API_KEY does not appear to be a valid Anthropic API key"
+        return (
+            False,
+            "ANTHROPIC_API_KEY does not appear to be a valid Anthropic API key",
+        )
 
     return True, ""
 
@@ -198,7 +225,8 @@ def validate_mcp_binary() -> tuple[bool, str]:
     """
     import os
 
-    mcp_path = "/usr/local/bin/mcp-kubernetes"
+    settings = get_settings()
+    mcp_path = settings.mcp_kubernetes_path
     if os.path.isfile(mcp_path) and os.access(mcp_path, os.X_OK):
         return True, ""
 

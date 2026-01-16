@@ -31,34 +31,44 @@ class Settings(BaseSettings):
     anthropic_api_key: str = Field(
         default="",
         validation_alias="ANTHROPIC_API_KEY",
-        description="Anthropic API key for Claude models"
+        description="Anthropic API key for Claude models",
     )
     coordinator_model: str = Field(
-        default="claude-sonnet-4-5-20250514",
+        default="claude-sonnet-4-5-20250929",
         validation_alias="ANTHROPIC_COORDINATOR_MODEL",
-        description="Model for coordinator agent (reasoning/orchestration)"
+        description="Model for coordinator agent (reasoning/orchestration)",
     )
     collector_model: str = Field(
         default="claude-3-5-haiku-20241022",
         validation_alias="ANTHROPIC_COLLECTOR_MODEL",
-        description="Model for collector agents (data gathering)"
+        description="Model for collector agents (data gathering)",
     )
 
     # Kubernetes
     kubeconfig: str = Field(
         default="",
         validation_alias="KUBECONFIG",
-        description="Path to workload cluster kubeconfig"
+        description="Path to workload cluster kubeconfig",
+    )
+    mc_kubeconfig: str = Field(
+        default="",
+        validation_alias="MC_KUBECONFIG",
+        description="Path to management cluster kubeconfig (optional, uses in-cluster if not set)",
+    )
+    mcp_kubernetes_path: str = Field(
+        default="/usr/local/bin/mcp-kubernetes",
+        validation_alias="MCP_KUBERNETES_PATH",
+        description="Path to mcp-kubernetes binary",
     )
     wc_cluster: str = Field(
         default="workload cluster",
         validation_alias="WC_CLUSTER",
-        description="Workload cluster name for prompt substitution"
+        description="Workload cluster name for prompt substitution",
     )
     org_ns: str = Field(
         default="organization namespace",
         validation_alias="ORG_NS",
-        description="Organization namespace for prompt substitution"
+        description="Organization namespace for prompt substitution",
     )
 
     # Investigation defaults
@@ -67,33 +77,33 @@ class Settings(BaseSettings):
         ge=30,
         le=600,
         validation_alias="SHOOT_TIMEOUT_SECONDS",
-        description="Default timeout for investigations (seconds)"
+        description="Default timeout for investigations (seconds)",
     )
     max_turns: int = Field(
         default=15,
         ge=5,
         le=50,
         validation_alias="SHOOT_MAX_TURNS",
-        description="Maximum conversation turns per investigation"
+        description="Maximum conversation turns per investigation",
     )
 
     # OpenTelemetry
     otel_exporter_otlp_endpoint: str = Field(
         default="",
         validation_alias="OTEL_EXPORTER_OTLP_ENDPOINT",
-        description="OTLP endpoint for telemetry export"
+        description="OTLP endpoint for telemetry export",
     )
     otel_service_name: str = Field(
         default="shoot",
         validation_alias="OTEL_SERVICE_NAME",
-        description="Service name for telemetry"
+        description="Service name for telemetry",
     )
 
     # Development
     debug: bool = Field(
         default=False,
         validation_alias="DEBUG",
-        description="Enable debug mode for verbose logging"
+        description="Enable debug mode for verbose logging",
     )
 
 
@@ -113,6 +123,7 @@ def get_settings() -> Settings:
 
 # Prompts are loaded once at module import time and cached
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
+
 
 def _load_prompt(filename: str) -> str:
     """Load a prompt file from the prompts directory."""
@@ -140,8 +151,10 @@ def _ensure_prompts_loaded() -> None:
 def get_coordinator_prompt() -> str:
     """Get the coordinator system prompt with variable substitution."""
     _ensure_prompts_loaded()
+    prompt_template = _COORDINATOR_PROMPT_TEMPLATE
+    assert prompt_template is not None
     settings = get_settings()
-    template = Template(_COORDINATOR_PROMPT_TEMPLATE)
+    template = Template(prompt_template)
     return template.safe_substitute(
         WC_CLUSTER=settings.wc_cluster,
         ORG_NS=settings.org_ns,
@@ -151,8 +164,10 @@ def get_coordinator_prompt() -> str:
 def get_wc_collector_prompt() -> str:
     """Get the WC collector system prompt with variable substitution."""
     _ensure_prompts_loaded()
+    prompt_template = _WC_COLLECTOR_PROMPT_TEMPLATE
+    assert prompt_template is not None
     settings = get_settings()
-    template = Template(_WC_COLLECTOR_PROMPT_TEMPLATE)
+    template = Template(prompt_template)
     return template.safe_substitute(
         WC_CLUSTER=settings.wc_cluster,
     )
@@ -161,8 +176,10 @@ def get_wc_collector_prompt() -> str:
 def get_mc_collector_prompt() -> str:
     """Get the MC collector system prompt with variable substitution."""
     _ensure_prompts_loaded()
+    prompt_template = _MC_COLLECTOR_PROMPT_TEMPLATE
+    assert prompt_template is not None
     settings = get_settings()
-    template = Template(_MC_COLLECTOR_PROMPT_TEMPLATE)
+    template = Template(prompt_template)
     return template.safe_substitute(
         WC_CLUSTER=settings.wc_cluster,
         ORG_NS=settings.org_ns,

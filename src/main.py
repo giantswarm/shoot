@@ -14,6 +14,7 @@ Architecture:
 import asyncio
 import uuid
 from contextvars import ContextVar
+from typing import Any, AsyncGenerator
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -40,18 +41,18 @@ request_id_ctx: ContextVar[str] = ContextVar("request_id", default="")
 app = FastAPI(
     title="Shoot API",
     description="A Kubernetes debugging agent powered by Claude",
-    version="2.12.0"
+    version="2.12.0",
 )
 
 
 @app.get("/health")
-async def health():
+async def health() -> dict[str, str]:
     """Liveness probe - checks if the application is running."""
     return {"status": "healthy"}
 
 
 @app.get("/ready")
-async def ready(deep: bool = False):
+async def ready(deep: bool = False) -> dict[str, Any]:
     """
     Readiness probe - checks if the application is ready to serve traffic.
 
@@ -74,15 +75,15 @@ async def ready(deep: bool = False):
         preflight = run_preflight_checks()
         checks["preflight"] = preflight
         # Consider not ready if any preflight check fails
-        all_preflight_valid = all(
-            check["valid"] for check in preflight.values()
-        )
+        all_preflight_valid = all(check["valid"] for check in preflight.values())
         if not all_preflight_valid:
             checks["status"] = "not_ready"
             raise HTTPException(status_code=503, detail=checks)
 
     # If any critical dependency is missing, return 503
-    if not all([checks["kubernetes_wc"], checks["kubernetes_mc"], checks["coordinator"]]):
+    if not all(
+        [checks["kubernetes_wc"], checks["kubernetes_mc"], checks["coordinator"]]
+    ):
         checks["status"] = "not_ready"
         raise HTTPException(status_code=503, detail=checks)
 
@@ -90,7 +91,7 @@ async def ready(deep: bool = False):
 
 
 @app.post("/")
-async def run(request: Request):
+async def run(request: Request) -> dict[str, Any]:
     """
     Run the Shoot agent to investigate a Kubernetes issue.
 
@@ -155,10 +156,10 @@ async def run(request: Request):
                         "error": "Investigation timed out",
                         "request_id": request_id,
                         "timeout_seconds": http_timeout,
-                    }
+                    },
                 )
 
-            response = {"result": result, "request_id": request_id}
+            response: dict[str, Any] = {"result": result, "request_id": request_id}
 
             # Optionally include structured output
             if want_structured:
@@ -176,13 +177,12 @@ async def run(request: Request):
             span.set_attribute("error", True)
             span.set_attribute("error.message", str(e))
             raise HTTPException(
-                status_code=500,
-                detail={"error": str(e), "request_id": request_id}
+                status_code=500, detail={"error": str(e), "request_id": request_id}
             )
 
 
 @app.post("/stream")
-async def run_stream(request: Request):
+async def run_stream(request: Request) -> StreamingResponse:
     """
     Run the Shoot agent with streaming response.
 
@@ -218,7 +218,7 @@ async def run_stream(request: Request):
             f"query_length={len(query)} timeout={timeout_seconds}s"
         )
 
-        async def generate():
+        async def generate() -> AsyncGenerator[str, None]:
             try:
                 async for chunk in run_coordinator_streaming(
                     query,
@@ -226,9 +226,13 @@ async def run_stream(request: Request):
                     max_turns=max_turns,
                 ):
                     yield chunk
-                logger.info(f"Streaming investigation completed request_id={request_id}")
+                logger.info(
+                    f"Streaming investigation completed request_id={request_id}"
+                )
             except Exception as e:
-                logger.exception(f"Streaming investigation failed request_id={request_id}")
+                logger.exception(
+                    f"Streaming investigation failed request_id={request_id}"
+                )
                 yield f"\n\n[ERROR: {str(e)}]"
 
         return StreamingResponse(
@@ -239,23 +243,22 @@ async def run_stream(request: Request):
                 "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",  # Disable nginx buffering
                 "X-Request-ID": request_id,
-            }
+            },
         )
     except HTTPException:
         raise
     except Exception as e:
         logger.exception(f"Streaming investigation failed request_id={request_id}")
         raise HTTPException(
-            status_code=500,
-            detail={"error": str(e), "request_id": request_id}
+            status_code=500, detail={"error": str(e), "request_id": request_id}
         )
 
 
 @app.get("/schema")
-async def get_schema():
+async def get_schema() -> dict[str, Any]:
     """
     Get the JSON schema for structured diagnostic reports.
-    
+
     This schema describes the expected output format when the coordinator
     successfully generates a structured diagnostic report.
     """

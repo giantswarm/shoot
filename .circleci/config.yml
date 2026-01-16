@@ -18,7 +18,7 @@ workflows:
           branches:
             ignore:
             - main
-            
+
     - architect/push-to-app-catalog:
         executor: app-build-suite
         context: architect

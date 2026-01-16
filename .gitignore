@@ -1,4 +1,7 @@
 venv
+.venv
 kubeconfig.yaml
 mcp-kubernetes
 app.yaml
+local_config
+__pycache__

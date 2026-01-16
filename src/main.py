@@ -12,9 +12,20 @@ Architecture:
 """
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import StreamingResponse
 
-from coordinator import run_coordinator, is_coordinator_ready
+from coordinator import (
+    run_coordinator,
+    run_coordinator_streaming,
+    is_coordinator_ready,
+    get_structured_report,
+)
 from collectors import get_mcp_configs_valid
+from schemas import DIAGNOSTIC_REPORT_SCHEMA
+from telemetry import get_tracer, trace_operation
+
+# Initialize telemetry on module load
+get_tracer()
 
 # Configure HTTP endpoint
 app = FastAPI(
@@ -56,10 +67,72 @@ async def run(request: Request):
     Run the Shoot agent to investigate a Kubernetes issue.
     
     Request body:
-        {"query": "Description of the issue, e.g., 'Deployment not ready'"}
+        {
+            "query": "Description of the issue, e.g., 'Deployment not ready'",
+            "timeout_seconds": 300,  // optional, default 300
+            "max_turns": 15,         // optional, default 15
+            "structured": false      // optional, return structured JSON if parseable
+        }
     
     Returns:
         {"result": "Diagnostic report with findings and recommendations"}
+        
+        If structured=true and output is parseable:
+        {"result": "...", "structured": {...}}
+    """
+    with trace_operation("api.investigate") as span:
+        try:
+            data = await request.json()
+            query = data.get("query")
+            if not query:
+                raise HTTPException(status_code=400, detail="Query is required")
+            
+            # Optional parameters
+            timeout_seconds = data.get("timeout_seconds")
+            max_turns = data.get("max_turns")
+            want_structured = data.get("structured", False)
+            
+            span.set_attribute("query_length", len(query))
+            
+            result = await run_coordinator(
+                query,
+                timeout_seconds=timeout_seconds,
+                max_turns=max_turns,
+            )
+            
+            response = {"result": result}
+            
+            # Optionally include structured output
+            if want_structured:
+                structured = get_structured_report(result)
+                if structured:
+                    response["structured"] = structured.model_dump()
+            
+            return response
+        except HTTPException:
+            raise
+        except Exception as e:
+            span.set_attribute("error", True)
+            raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/stream")
+async def run_stream(request: Request):
+    """
+    Run the Shoot agent with streaming response.
+    
+    Provides real-time feedback during long investigations by streaming
+    text chunks as they are generated.
+    
+    Request body:
+        {
+            "query": "Description of the issue, e.g., 'Deployment not ready'",
+            "timeout_seconds": 300,  // optional, default 300
+            "max_turns": 15          // optional, default 15
+        }
+    
+    Returns:
+        text/event-stream with diagnostic report chunks
     """
     try:
         data = await request.json()
@@ -67,9 +140,38 @@ async def run(request: Request):
         if not query:
             raise HTTPException(status_code=400, detail="Query is required")
         
-        result = await run_coordinator(query)
-        return {"result": result}
+        timeout_seconds = data.get("timeout_seconds")
+        max_turns = data.get("max_turns")
+        
+        async def generate():
+            async for chunk in run_coordinator_streaming(
+                query,
+                timeout_seconds=timeout_seconds,
+                max_turns=max_turns,
+            ):
+                yield chunk
+        
+        return StreamingResponse(
+            generate(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",  # Disable nginx buffering
+            }
+        )
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/schema")
+async def get_schema():
+    """
+    Get the JSON schema for structured diagnostic reports.
+    
+    This schema describes the expected output format when the coordinator
+    successfully generates a structured diagnostic report.
+    """
+    return DIAGNOSTIC_REPORT_SCHEMA

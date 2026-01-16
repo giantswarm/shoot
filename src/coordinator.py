@@ -16,7 +16,7 @@ It can only delegate to collectors via allowed_tools=["Task"].
 
 import os
 from string import Template
-from typing import Any
+from typing import Any, AsyncGenerator
 
 from claude_agent_sdk import (
     ClaudeSDKClient,
@@ -31,6 +31,19 @@ from collectors import (
     get_mc_mcp_config,
     create_agent_definitions,
 )
+from telemetry import trace_operation, add_event, set_span_attribute
+from schemas import parse_markdown_report, DiagnosticReport
+
+
+# =============================================================================
+# Configuration
+# =============================================================================
+
+# Default timeout for investigations (5 minutes)
+DEFAULT_TIMEOUT_SECONDS = int(os.environ.get('SHOOT_TIMEOUT_SECONDS', '300'))
+
+# Maximum conversation turns to prevent infinite loops
+DEFAULT_MAX_TURNS = int(os.environ.get('SHOOT_MAX_TURNS', '15'))
 
 
 def _get_coordinator_system_prompt() -> str:
@@ -42,7 +55,10 @@ def _get_coordinator_system_prompt() -> str:
     )
 
 
-def create_coordinator_options() -> ClaudeAgentOptions:
+def create_coordinator_options(
+    timeout_seconds: int | None = None,
+    max_turns: int | None = None,
+) -> ClaudeAgentOptions:
     """
     Create ClaudeAgentOptions for the coordinator.
     
@@ -51,6 +67,10 @@ def create_coordinator_options() -> ClaudeAgentOptions:
     - Two MCP servers configured: kubernetes_wc and kubernetes_mc
     - Each subagent (via AgentDefinition) is restricted to its own MCP tools
     - Coordinator itself has NO MCP access (allowed_tools=["Task"] only)
+    
+    Args:
+        timeout_seconds: Maximum time for investigation (default: 300s)
+        max_turns: Maximum conversation turns (default: 15)
     """
     coordinator_model = os.environ.get('ANTHROPIC_COORDINATOR_MODEL', 'claude-sonnet-4-5')
     
@@ -70,10 +90,17 @@ def create_coordinator_options() -> ClaudeAgentOptions:
         agents=create_agent_definitions(),
         # Bypass permission prompts for automated execution
         permission_mode="bypassPermissions",
+        # Timeout and turn limits to prevent runaway investigations
+        timeout_seconds=timeout_seconds or DEFAULT_TIMEOUT_SECONDS,
+        max_turns=max_turns or DEFAULT_MAX_TURNS,
     )
 
 
-async def run_coordinator(query_text: str) -> str:
+async def run_coordinator(
+    query_text: str,
+    timeout_seconds: int | None = None,
+    max_turns: int | None = None,
+) -> str:
     """
     Run the coordinator agent to investigate a Kubernetes issue.
     
@@ -82,46 +109,134 @@ async def run_coordinator(query_text: str) -> str:
     
     Args:
         query_text: High-level failure description (e.g., "Deployment not ready")
+        timeout_seconds: Optional timeout override
+        max_turns: Optional max turns override
         
     Returns:
         Diagnostic report as a string
     """
-    options = create_coordinator_options()
-    
-    result_text = ""
-    debug_messages: list[Any] = []
-    
-    logger.info(f"Starting investigation: {query_text[:100]}...")
-    
-    async with ClaudeSDKClient(options=options) as client:
-        # Send the investigation query
-        await client.query(query_text)
+    with trace_operation("coordinator.investigate", {
+        "query": query_text[:200],
+        "timeout_seconds": timeout_seconds or DEFAULT_TIMEOUT_SECONDS,
+        "max_turns": max_turns or DEFAULT_MAX_TURNS,
+    }) as span:
+        options = create_coordinator_options(timeout_seconds, max_turns)
         
-        # Process response messages
-        async for message in client.receive_response():
-            if isinstance(message, AssistantMessage):
-                for block in message.content:
-                    if isinstance(block, TextBlock):
-                        result_text += block.text
-                debug_messages.append(message)
-            elif isinstance(message, ResultMessage):
-                if message.is_error:
-                    logger.error(f"Coordinator error: {message.result}")
-                else:
-                    logger.info(
-                        f"Investigation completed in {message.duration_ms}ms, "
-                        f"turns: {message.num_turns}, "
-                        f"cost: ${message.total_cost_usd or 0:.4f}"
-                    )
+        result_text = ""
+        debug_messages: list[Any] = []
+        
+        logger.info(f"Starting investigation: {query_text[:100]}...")
+        add_event("investigation_started", {"query_length": len(query_text)})
+        
+        async with ClaudeSDKClient(options=options) as client:
+            # Send the investigation query
+            await client.query(query_text)
+            
+            # Process response messages
+            turn_count = 0
+            async for message in client.receive_response():
+                if isinstance(message, AssistantMessage):
+                    turn_count += 1
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            result_text += block.text
+                    debug_messages.append(message)
+                    add_event("assistant_message", {"turn": turn_count})
+                elif isinstance(message, ResultMessage):
+                    if message.is_error:
+                        logger.error(f"Coordinator error: {message.result}")
+                        set_span_attribute("error", True)
+                        set_span_attribute("error.message", str(message.result))
+                    else:
+                        logger.info(
+                            f"Investigation completed in {message.duration_ms}ms, "
+                            f"turns: {message.num_turns}, "
+                            f"cost: ${message.total_cost_usd or 0:.4f}"
+                        )
+                        # Record metrics as span attributes
+                        set_span_attribute("duration_ms", message.duration_ms)
+                        set_span_attribute("num_turns", message.num_turns)
+                        set_span_attribute("cost_usd", message.total_cost_usd or 0)
+        
+        # Debug mode: log all messages
+        if os.environ.get("DEBUG", "").lower() in ("true", "1", "yes"):
+            logger.info("=== DEBUG MODE: Coordinator All Messages ===")
+            for msg in debug_messages:
+                logger.info(msg)
+            logger.info("=== End Coordinator Debug Output ===")
+        
+        # Try to parse structured output
+        parsed_report = parse_markdown_report(result_text)
+        if parsed_report:
+            set_span_attribute("output.structured", True)
+            set_span_attribute("output.summary_items", len(parsed_report.summary))
+        else:
+            set_span_attribute("output.structured", False)
+        
+        return result_text
+
+
+async def run_coordinator_streaming(
+    query_text: str,
+    timeout_seconds: int | None = None,
+    max_turns: int | None = None,
+) -> AsyncGenerator[str, None]:
+    """
+    Run the coordinator agent with streaming response.
     
-    # Debug mode: log all messages
-    if os.environ.get("DEBUG", "").lower() in ("true", "1", "yes"):
-        logger.info("=== DEBUG MODE: Coordinator All Messages ===")
-        for msg in debug_messages:
-            logger.info(msg)
-        logger.info("=== End Coordinator Debug Output ===")
+    Yields text chunks as they are received, providing real-time feedback
+    during long investigations.
     
-    return result_text
+    Args:
+        query_text: High-level failure description
+        timeout_seconds: Optional timeout override
+        max_turns: Optional max turns override
+        
+    Yields:
+        Text chunks as they are generated
+    """
+    with trace_operation("coordinator.investigate.streaming", {
+        "query": query_text[:200],
+        "streaming": True,
+    }) as span:
+        options = create_coordinator_options(timeout_seconds, max_turns)
+        
+        logger.info(f"Starting streaming investigation: {query_text[:100]}...")
+        add_event("investigation_started", {"query_length": len(query_text), "streaming": True})
+        
+        async with ClaudeSDKClient(options=options) as client:
+            await client.query(query_text)
+            
+            turn_count = 0
+            async for message in client.receive_response():
+                if isinstance(message, AssistantMessage):
+                    turn_count += 1
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            yield block.text
+                    add_event("assistant_message", {"turn": turn_count})
+                elif isinstance(message, ResultMessage):
+                    if message.is_error:
+                        logger.error(f"Coordinator error: {message.result}")
+                        set_span_attribute("error", True)
+                    else:
+                        logger.info(
+                            f"Streaming investigation completed in {message.duration_ms}ms, "
+                            f"turns: {message.num_turns}, "
+                            f"cost: ${message.total_cost_usd or 0:.4f}"
+                        )
+                        set_span_attribute("duration_ms", message.duration_ms)
+                        set_span_attribute("num_turns", message.num_turns)
+                        set_span_attribute("cost_usd", message.total_cost_usd or 0)
+
+
+def get_structured_report(result_text: str) -> DiagnosticReport | None:
+    """
+    Attempt to parse the coordinator's text output into a structured report.
+    
+    Returns None if the output doesn't match the expected format.
+    """
+    return parse_markdown_report(result_text)
 
 
 def is_coordinator_ready() -> bool:

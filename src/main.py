@@ -27,6 +27,7 @@ from coordinator import (
     run_coordinator_streaming,
     is_coordinator_ready,
     get_structured_report,
+    InvestigationResult,
 )
 from schemas import DIAGNOSTIC_REPORT_SCHEMA
 from telemetry import get_tracer, trace_operation
@@ -104,11 +105,36 @@ async def run(request: Request) -> dict[str, Any]:
         }
 
     Returns:
-        {"result": "Diagnostic report with findings and recommendations",
-         "request_id": "uuid"}
+        {
+            "result": "Diagnostic report with findings and recommendations",
+            "request_id": "uuid",
+            "metrics": {
+                "duration_ms": 12345,
+                "num_turns": 8,
+                "total_cost_usd": 0.0245,
+                "usage": {
+                    "input_tokens": 1234,
+                    "output_tokens": 567,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 890
+                },
+                "breakdown": {
+                    "wc_collector": {
+                        "usage": {"input_tokens": 500, "output_tokens": 200},
+                        "total_cost_usd": 0.01,
+                        "duration_ms": 3000
+                    },
+                    "mc_collector": {
+                        "usage": {"input_tokens": 300, "output_tokens": 150},
+                        "total_cost_usd": 0.008,
+                        "duration_ms": 2000
+                    }
+                }
+            }
+        }
 
         If structured=true and output is parseable:
-        {"result": "...", "structured": {...}, "request_id": "uuid"}
+        {"result": "...", "structured": {...}, "metrics": {...}, "request_id": "uuid"}
     """
     # Generate request ID for tracking
     request_id = str(uuid.uuid4())
@@ -141,7 +167,7 @@ async def run(request: Request) -> dict[str, Any]:
             http_timeout = timeout_seconds + 30
             try:
                 async with asyncio.timeout(http_timeout):
-                    result = await run_coordinator(
+                    investigation_result: InvestigationResult = await run_coordinator(
                         query,
                         timeout_seconds=timeout_seconds,
                         max_turns=max_turns,
@@ -159,11 +185,22 @@ async def run(request: Request) -> dict[str, Any]:
                     },
                 )
 
-            response: dict[str, Any] = {"result": result, "request_id": request_id}
+            # Build response with result and metrics
+            response: dict[str, Any] = {
+                "result": investigation_result["result"],
+                "request_id": request_id,
+                "metrics": {
+                    "duration_ms": investigation_result["duration_ms"],
+                    "num_turns": investigation_result["num_turns"],
+                    "total_cost_usd": investigation_result["total_cost_usd"],
+                    "usage": investigation_result["usage"],
+                    "breakdown": investigation_result.get("breakdown"),
+                },
+            }
 
             # Optionally include structured output
             if want_structured:
-                structured = get_structured_report(result)
+                structured = get_structured_report(investigation_result["result"])
                 if structured:
                     response["structured"] = structured.model_dump()
 

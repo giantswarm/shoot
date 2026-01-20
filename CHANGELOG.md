@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Request ID tracking for all API requests
 - HTTP-level timeout handling with 504 response on timeout
 - Structured error responses with request ID for debugging
+- **Token usage and cost metrics in API responses** - all endpoints now return detailed usage information including:
+  - Total tokens (input/output)
+  - Cache read/creation tokens
+  - Total cost in USD
+  - Duration in milliseconds
+  - Number of turns
+  - **Per-agent breakdown** showing separate metrics for coordinator, wc_collector, and mc_collector
 
 ### Changed
 
@@ -27,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All configuration now loaded from centralized `Settings` class
 - Prompts are now cached at startup instead of read on each request
 - Better error messages with request ID for traceability
-- `make local-query` now prints only the result content, not the full JSON response
+- `make local-query` now displays formatted metrics including token usage, cost, and per-agent breakdown
 - Updated README.md with comprehensive local development instructions (Docker and native Python setup)
 
 ### Fixed

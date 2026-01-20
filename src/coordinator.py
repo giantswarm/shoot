@@ -14,7 +14,7 @@ IMPORTANT: The coordinator has NO direct MCP/Kubernetes access.
 It can only delegate to collectors via allowed_tools=["Task"].
 """
 
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, TypedDict
 
 from claude_agent_sdk import (
     ClaudeSDKClient,
@@ -22,7 +22,10 @@ from claude_agent_sdk import (
     AssistantMessage,
     TextBlock,
     ResultMessage,
+    ToolUseBlock,
+    ToolResultBlock,
 )
+
 from app_logging import logger
 from collectors import (
     get_wc_mcp_config,
@@ -32,6 +35,17 @@ from collectors import (
 from config import get_settings, get_coordinator_prompt
 from telemetry import trace_operation, add_event, set_span_attribute
 from schemas import parse_markdown_report, DiagnosticReport
+
+
+class InvestigationResult(TypedDict):
+    """Result from a coordinator investigation including usage metrics."""
+
+    result: str
+    duration_ms: int
+    num_turns: int
+    total_cost_usd: float | None
+    usage: dict[str, Any] | None
+    breakdown: dict[str, dict[str, Any]] | None
 
 
 def create_coordinator_options(
@@ -75,11 +89,11 @@ def create_coordinator_options(
     )
 
 
-async def run_coordinator(
+async def run_coordinator(  # noqa: C901
     query_text: str,
     timeout_seconds: int | None = None,
     max_turns: int | None = None,
-) -> str:
+) -> InvestigationResult:
     """
     Run the coordinator agent to investigate a Kubernetes issue.
 
@@ -92,7 +106,7 @@ async def run_coordinator(
         max_turns: Optional max turns override
 
     Returns:
-        Diagnostic report as a string
+        InvestigationResult with diagnostic report and usage metrics
     """
     settings = get_settings()
 
@@ -108,6 +122,17 @@ async def run_coordinator(
 
         result_text = ""
         debug_messages: list[Any] = []
+        # Capture metrics from ResultMessage
+        metrics: dict[str, Any] = {
+            "duration_ms": 0,
+            "num_turns": 0,
+            "total_cost_usd": None,
+            "usage": None,
+        }
+        # Track subagent metrics separately
+        subagent_breakdown: dict[str, dict[str, Any]] = {}
+        # Map tool_use_id to subagent type for Task calls
+        task_tool_uses: dict[str, str] = {}
 
         logger.info(f"Starting investigation: {query_text[:100]}...")
         add_event("investigation_started", {"query_length": len(query_text)})
@@ -119,14 +144,51 @@ async def run_coordinator(
             # Process response messages
             turn_count = 0
             async for message in client.receive_response():
+                # Log all message types to debug
+                logger.info(f"Received message type: {type(message).__name__}")
+
                 if isinstance(message, AssistantMessage):
                     turn_count += 1
                     for block in message.content:
                         if isinstance(block, TextBlock):
                             result_text += block.text
+                        elif isinstance(block, ToolUseBlock):
+                            # Track Task tool uses to capture subagent metrics
+                            if block.name == "Task":
+                                subagent_type = block.input.get(
+                                    "subagent_type", "unknown"
+                                )
+                                task_tool_uses[block.id] = subagent_type
+                                logger.info(
+                                    f"Tracking Task call for subagent: {subagent_type}, id: {block.id}"
+                                )
+                        elif isinstance(block, ToolResultBlock):
+                            # Capture subagent metrics from Task results
+                            logger.info(
+                                f"Got ToolResultBlock: tool_use_id={block.tool_use_id}, is_error={block.is_error}"
+                            )
+                            if block.tool_use_id in task_tool_uses:
+                                subagent_type = task_tool_uses[block.tool_use_id]
+                                logger.info(f"Found Task result for {subagent_type}")
+                                # The content should be the Task tool output
+                                # According to SDK docs, Task returns: result, usage, total_cost_usd, duration_ms
+                                # But the actual content might be just the text result
+                                # Let's log what we actually get
+                                logger.info(
+                                    f"ToolResultBlock content type: {type(block.content)}"
+                                )
+                                logger.info(
+                                    f"ToolResultBlock content: {str(block.content)[:500]}"
+                                )
                     debug_messages.append(message)
                     add_event("assistant_message", {"turn": turn_count})
                 elif isinstance(message, ResultMessage):
+                    # Capture metrics
+                    metrics["duration_ms"] = message.duration_ms
+                    metrics["num_turns"] = message.num_turns
+                    metrics["total_cost_usd"] = message.total_cost_usd
+                    metrics["usage"] = message.usage
+
                     if message.is_error:
                         logger.error(f"Coordinator error: {message.result}")
                         set_span_attribute("error", True)
@@ -141,6 +203,8 @@ async def run_coordinator(
                         set_span_attribute("duration_ms", message.duration_ms)
                         set_span_attribute("num_turns", message.num_turns)
                         set_span_attribute("cost_usd", message.total_cost_usd or 0)
+                        if message.usage:
+                            set_span_attribute("usage", str(message.usage))
 
         # Debug mode: log all messages
         if settings.debug:
@@ -157,7 +221,14 @@ async def run_coordinator(
         else:
             set_span_attribute("output.structured", False)
 
-        return result_text
+        return InvestigationResult(
+            result=result_text,
+            duration_ms=metrics["duration_ms"],
+            num_turns=metrics["num_turns"],
+            total_cost_usd=metrics["total_cost_usd"],
+            usage=metrics["usage"],
+            breakdown=subagent_breakdown if subagent_breakdown else None,
+        )
 
 
 async def run_coordinator_streaming(

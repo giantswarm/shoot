@@ -105,7 +105,30 @@ local-run: local-deps ## Run locally with uvicorn using local_config/.env and ku
 
 .PHONY: local-query
 local-query: ## Send a test query to the local server. Usage: make -f Makefile.local.mk local-query [Q="your query"]
-	@curl -s http://localhost:8000/ \
+	@tmpfile=$$(mktemp); \
+	curl -s http://localhost:8000/ \
 		-H "Content-Type: application/json" \
 		-d '{"query": "$(if $(Q),$(Q),List all namespaces in the workload cluster)"}' \
-		| python3 -c 'import sys, json; data = json.load(sys.stdin); print(data.get("result", data))'
+		> $$tmpfile; \
+	jq -r '.result' $$tmpfile; \
+	echo; \
+	echo "================================================================================"; \
+	echo "METRICS"; \
+	echo "================================================================================"; \
+	jq -r '"Duration: \(.metrics.duration_ms / 1000)s"' $$tmpfile; \
+	jq -r '"Turns: \(.metrics.num_turns)"' $$tmpfile; \
+	jq -r '"Cost: $$\(.metrics.total_cost_usd)"' $$tmpfile; \
+	jq -r '"Input tokens: \(.metrics.usage.input_tokens // 0)"' $$tmpfile; \
+	jq -r '"Output tokens: \(.metrics.usage.output_tokens // 0)"' $$tmpfile; \
+	if [ "$$(jq -r '.metrics.usage.cache_read_input_tokens // 0' $$tmpfile)" != "0" ]; then \
+		jq -r '"Cache read tokens: \(.metrics.usage.cache_read_input_tokens)"' $$tmpfile; \
+	fi; \
+	if [ "$$(jq -r '.metrics.usage.cache_creation_input_tokens // 0' $$tmpfile)" != "0" ]; then \
+		jq -r '"Cache creation tokens: \(.metrics.usage.cache_creation_input_tokens)"' $$tmpfile; \
+	fi; \
+	if [ "$$(jq -r '.metrics.breakdown' $$tmpfile)" != "null" ]; then \
+		echo; \
+		echo "Agent Breakdown:"; \
+		jq -r '.metrics.breakdown | to_entries[] | "  \(.key):\n    Cost: $$\(.value.total_cost_usd // 0)\n    Input: \(.value.usage.input_tokens // 0), Output: \(.value.usage.output_tokens // 0)"' $$tmpfile; \
+	fi; \
+	rm -f $$tmpfile

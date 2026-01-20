@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-01-20
+
 ### Added
 
 - `MC_KUBECONFIG` environment variable for local development with management cluster kubeconfig
@@ -165,7 +167,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First release using Pydantic AI and using a single MCP pointing to the
 
 
-[Unreleased]: https://github.com/giantswarm/shoot/compare/v2.12.0...HEAD
+[Unreleased]: https://github.com/giantswarm/shoot/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/giantswarm/shoot/compare/v2.12.0...v3.0.0
 [2.12.0]: https://github.com/giantswarm/shoot/compare/v2.11.1...v2.12.0
 [2.11.1]: https://github.com/giantswarm/shoot/compare/v2.11.0...v2.11.1
 [2.11.0]: https://github.com/giantswarm/shoot/compare/v2.10.1...v2.11.0

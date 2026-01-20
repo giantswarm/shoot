@@ -4,6 +4,9 @@ IMAGE_NAME ?= shoot
 IMAGE_TAG ?= local
 LOCAL_CONFIG_DIR ?= local_config
 
+# Helper for optional JSON fields in curl commands
+comma := ,
+
 .PHONY: docker-build
 docker-build: ## Build Docker image locally
 	docker build -t $(IMAGE_NAME):$(IMAGE_TAG) .
@@ -18,8 +21,10 @@ docker-run: ## Run Docker container with local kubeconfigs
 		--env-file $(LOCAL_CONFIG_DIR)/.env \
 		-v $(PWD)/$(LOCAL_CONFIG_DIR)/wc-kubeconfig.yaml:/k8s/wc-kubeconfig.yaml:ro \
 		-v $(PWD)/$(LOCAL_CONFIG_DIR)/mc-kubeconfig.yaml:/k8s/mc-kubeconfig.yaml:ro \
+		-v $(PWD)/config:/app/config:ro \
 		-e KUBECONFIG=/k8s/wc-kubeconfig.yaml \
 		-e MC_KUBECONFIG=/k8s/mc-kubeconfig.yaml \
+		-e SHOOT_CONFIG=/app/config/shoot.yaml \
 		-p 8000:8000 \
 		$(IMAGE_NAME):$(IMAGE_TAG)
 
@@ -30,9 +35,14 @@ local-setup: ## Create local_config directory with templates
 		cp .env.example $(LOCAL_CONFIG_DIR)/.env; \
 		echo "Created $(LOCAL_CONFIG_DIR)/.env - edit with your ANTHROPIC_API_KEY"; \
 	fi
-	@echo "Place your kubeconfigs in $(LOCAL_CONFIG_DIR)/:"
-	@echo "  - wc-kubeconfig.yaml (workload cluster)"
-	@echo "  - mc-kubeconfig.yaml (management cluster)"
+	@echo ""
+	@echo "Setup instructions:"
+	@echo "  1. Edit $(LOCAL_CONFIG_DIR)/.env with your ANTHROPIC_API_KEY"
+	@echo "  2. Place your kubeconfigs in $(LOCAL_CONFIG_DIR)/:"
+	@echo "     - wc-kubeconfig.yaml (workload cluster)"
+	@echo "     - mc-kubeconfig.yaml (management cluster)"
+	@echo "  3. Configuration file: config/shoot.yaml (default)"
+	@echo "     - Customize or set SHOOT_CONFIG to use a different config file"
 
 .PHONY: local-kubeconfig
 local-kubeconfig: ## Login to clusters via tsh and create kubeconfigs. Usage: make -f Makefile.local.mk local-kubeconfig MC=<cluster> [WC=<cluster>]
@@ -100,21 +110,23 @@ local-run: local-deps ## Run locally with uvicorn using local_config/.env and ku
 		KUBECONFIG=$(PWD)/$(LOCAL_CONFIG_DIR)/wc-kubeconfig.yaml \
 		MC_KUBECONFIG=$(PWD)/$(LOCAL_CONFIG_DIR)/mc-kubeconfig.yaml \
 		MCP_KUBERNETES_PATH=$${MCP_KUBERNETES_PATH:-$(PWD)/$(LOCAL_CONFIG_DIR)/mcp-kubernetes} \
+		SHOOT_CONFIG=$${SHOOT_CONFIG:-$(PWD)/config/shoot.yaml} \
 		PYTHONPATH=$(PWD)/src \
 		uv run uvicorn src.main:app --reload --port 8000
 
 .PHONY: local-query
-local-query: ## Send a test query to the local server. Usage: make -f Makefile.local.mk local-query [Q="your query"]
+local-query: ## Send a test query to the local server. Usage: make -f Makefile.local.mk local-query [Q="your query"] [A="assistant_name"]
 	@tmpfile=$$(mktemp); \
 	curl -s http://localhost:8000/ \
 		-H "Content-Type: application/json" \
-		-d '{"query": "$(if $(Q),$(Q),List all namespaces in the workload cluster)"}' \
+		-d '{"query": "$(if $(Q),$(Q),List all namespaces in the workload cluster)"$(if $(A),$(comma) "assistant": "$(A)",)}' \
 		> $$tmpfile; \
 	jq -r '.result' $$tmpfile; \
 	echo; \
 	echo "================================================================================"; \
 	echo "METRICS"; \
 	echo "================================================================================"; \
+	jq -r '"Assistant: \(.assistant)"' $$tmpfile; \
 	jq -r '"Duration: \(.metrics.duration_ms / 1000)s"' $$tmpfile; \
 	jq -r '"Turns: \(.metrics.num_turns)"' $$tmpfile; \
 	jq -r '"Cost: $$\(.metrics.total_cost_usd)"' $$tmpfile; \
@@ -132,3 +144,11 @@ local-query: ## Send a test query to the local server. Usage: make -f Makefile.l
 		jq -r '.metrics.breakdown | to_entries[] | "  \(.key):\n    Cost: $$\(.value.total_cost_usd // 0)\n    Input: \(.value.usage.input_tokens // 0), Output: \(.value.usage.output_tokens // 0)"' $$tmpfile; \
 	fi; \
 	rm -f $$tmpfile
+
+.PHONY: local-assistants
+local-assistants: ## List available assistants from the local server
+	@curl -s http://localhost:8000/assistants | jq '.'
+
+.PHONY: local-ready
+local-ready: ## Check if the local server is ready (with deep checks)
+	@curl -s "http://localhost:8000/ready?deep=true" | jq '.'

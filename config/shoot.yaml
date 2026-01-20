@@ -1,0 +1,85 @@
+# Shoot Multi-Assistant Configuration
+# This file defines assistants, subagents, MCP servers, and response schemas.
+version: "1.0"
+
+# Default configurations (can be overridden per assistant/subagent)
+defaults:
+  models:
+    orchestrator: ${ANTHROPIC_COORDINATOR_MODEL:-claude-sonnet-4-5-20250514}
+    collector: ${ANTHROPIC_COLLECTOR_MODEL:-claude-3-5-haiku-20241022}
+  timeouts:
+    investigation: ${SHOOT_TIMEOUT_SECONDS:-300}
+    subagent: 60
+  max_turns:
+    investigation: ${SHOOT_MAX_TURNS:-15}
+    subagent: 10
+  response:
+    format: human
+
+# Response schemas (JSON Schema files for output validation and formatting)
+response_schemas:
+  diagnostic_report:
+    file: schemas/diagnostic_report.json
+    description: "Human-friendly diagnostic report with summary and recommendations"
+    format: human
+
+# MCP Server definitions (shared resources, referenced by name in subagents)
+mcp_servers:
+  kubernetes_wc:
+    command: ${MCP_KUBERNETES_PATH:-/usr/local/bin/mcp-kubernetes}
+    args: ["serve", "--non-destructive"]
+    env:
+      KUBECONFIG: ${KUBECONFIG}
+    tools:
+      - get
+      - list
+      - describe
+      - logs
+      - events
+
+  kubernetes_mc:
+    command: ${MCP_KUBERNETES_PATH:-/usr/local/bin/mcp-kubernetes}
+    args: ["serve", "--non-destructive"]
+    env:
+      KUBECONFIG: ${MC_KUBECONFIG:-}
+    in_cluster_fallback: true
+    tools:
+      - get
+      - list
+      - describe
+      - logs
+      - events
+
+# Subagent definitions (collectors that gather data from specific sources)
+subagents:
+  wc_collector:
+    description: |
+      Use this agent to collect runtime data from the WORKLOAD CLUSTER.
+      The WC collector gathers information about Pods, Deployments, Services,
+      ReplicaSets, events, logs, and other Kubernetes resources running in the
+      workload cluster. Use this as your PRIMARY data source for debugging.
+      This agent does NOT have access to management cluster resources.
+    system_prompt_file: ../src/prompts/wc_collector_prompt.md
+    mcp_servers: [kubernetes_wc]
+
+  mc_collector:
+    description: |
+      Use this agent to collect data from the MANAGEMENT CLUSTER.
+      The MC collector gathers information about App/HelmRelease deployment status
+      and CAPI/CAPA resources (Cluster, AWSCluster, Machine, MachinePool) for the
+      workload cluster. Use this ONLY when you need to check deployment status or
+      cluster infrastructure. This agent does NOT have access to workload cluster resources.
+    system_prompt_file: ../src/prompts/mc_collector_prompt.md
+    mcp_servers: [kubernetes_mc]
+
+# Assistant definitions (orchestrators that coordinate investigations)
+assistants:
+  kubernetes_debugger:
+    description: "General Kubernetes debugging assistant for investigating cluster issues"
+    system_prompt_file: ../src/prompts/coordinator_prompt.md
+    allowed_tools: [Task]
+    subagents: [wc_collector, mc_collector]
+    response_schema: diagnostic_report
+    prompt_variables:
+      WC_CLUSTER: ${WC_CLUSTER:-workload cluster}
+      ORG_NS: ${ORG_NS:-organization namespace}

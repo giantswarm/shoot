@@ -6,8 +6,6 @@ environment variable support and sensible defaults.
 """
 
 from functools import lru_cache
-from pathlib import Path
-from string import Template
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -106,6 +104,13 @@ class Settings(BaseSettings):
         description="Enable debug mode for verbose logging",
     )
 
+    # Configuration file
+    shoot_config: str = Field(
+        default="",
+        validation_alias="SHOOT_CONFIG",
+        description="Path to YAML configuration file for multi-assistant mode",
+    )
+
 
 @lru_cache()
 def get_settings() -> Settings:
@@ -115,80 +120,3 @@ def get_settings() -> Settings:
     Settings are loaded once and cached for the lifetime of the application.
     """
     return Settings()
-
-
-# =============================================================================
-# Prompt Caching
-# =============================================================================
-
-# Prompts are loaded once at module import time and cached
-_PROMPTS_DIR = Path(__file__).parent / "prompts"
-
-
-def _load_prompt(filename: str) -> str:
-    """Load a prompt file from the prompts directory."""
-    return (_PROMPTS_DIR / filename).read_text()
-
-
-# Cache prompt templates at module load
-_COORDINATOR_PROMPT_TEMPLATE: str | None = None
-_WC_COLLECTOR_PROMPT_TEMPLATE: str | None = None
-_MC_COLLECTOR_PROMPT_TEMPLATE: str | None = None
-
-
-def _ensure_prompts_loaded() -> None:
-    """Load prompt templates if not already loaded."""
-    global _COORDINATOR_PROMPT_TEMPLATE, _WC_COLLECTOR_PROMPT_TEMPLATE, _MC_COLLECTOR_PROMPT_TEMPLATE
-
-    if _COORDINATOR_PROMPT_TEMPLATE is None:
-        _COORDINATOR_PROMPT_TEMPLATE = _load_prompt("coordinator_prompt.md")
-    if _WC_COLLECTOR_PROMPT_TEMPLATE is None:
-        _WC_COLLECTOR_PROMPT_TEMPLATE = _load_prompt("wc_collector_prompt.md")
-    if _MC_COLLECTOR_PROMPT_TEMPLATE is None:
-        _MC_COLLECTOR_PROMPT_TEMPLATE = _load_prompt("mc_collector_prompt.md")
-
-
-def get_coordinator_prompt() -> str:
-    """Get the coordinator system prompt with variable substitution."""
-    _ensure_prompts_loaded()
-    prompt_template = _COORDINATOR_PROMPT_TEMPLATE
-    assert prompt_template is not None
-    settings = get_settings()
-    template = Template(prompt_template)
-    return template.safe_substitute(
-        WC_CLUSTER=settings.wc_cluster,
-        ORG_NS=settings.org_ns,
-    )
-
-
-def get_wc_collector_prompt() -> str:
-    """Get the WC collector system prompt with variable substitution."""
-    _ensure_prompts_loaded()
-    prompt_template = _WC_COLLECTOR_PROMPT_TEMPLATE
-    assert prompt_template is not None
-    settings = get_settings()
-    template = Template(prompt_template)
-    return template.safe_substitute(
-        WC_CLUSTER=settings.wc_cluster,
-    )
-
-
-def get_mc_collector_prompt() -> str:
-    """Get the MC collector system prompt with variable substitution."""
-    _ensure_prompts_loaded()
-    prompt_template = _MC_COLLECTOR_PROMPT_TEMPLATE
-    assert prompt_template is not None
-    settings = get_settings()
-    template = Template(prompt_template)
-    return template.safe_substitute(
-        WC_CLUSTER=settings.wc_cluster,
-        ORG_NS=settings.org_ns,
-    )
-
-
-# Eagerly load prompts at import time
-try:
-    _ensure_prompts_loaded()
-except FileNotFoundError:
-    # Allow import to succeed even if prompts don't exist (for testing)
-    pass

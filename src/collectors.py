@@ -2,123 +2,161 @@
 Collector configuration for the multi-agent Kubernetes debugging system.
 
 This module provides:
-- MCP server configurations for workload and management clusters
-- AgentDefinitions for use with ClaudeSDKClient
+- Config-driven MCP server configurations
+- Config-driven AgentDefinitions for use with ClaudeSDKClient
 - Pre-flight validation for configuration
 """
 
-from typing import Any
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, TYPE_CHECKING
 
 from claude_agent_sdk import AgentDefinition
 
-from config import get_settings, get_wc_collector_prompt, get_mc_collector_prompt
+from config import get_settings
+
+if TYPE_CHECKING:
+    from config_schema import MCPServerConfig, ShootConfig
 
 
 # =============================================================================
-# MCP Server Configurations
+# Config-Driven Agent Creation
 # =============================================================================
 
 
-def get_wc_mcp_config() -> dict[str, Any]:
+def build_mcp_config_from_schema(
+    mcp_config: MCPServerConfig,
+) -> dict[str, Any]:
     """
-    Get MCP server configuration for workload cluster.
+    Build an MCP server configuration dict from a schema config.
 
-    Uses KUBECONFIG environment variable to connect to the workload cluster.
+    Args:
+        mcp_config: MCPServerConfig from the config schema
+
+    Returns:
+        Dict suitable for ClaudeAgentOptions.mcp_servers
     """
-    settings = get_settings()
-    return {
-        "command": settings.mcp_kubernetes_path,
-        "args": ["serve", "--non-destructive"],
-        "env": {"KUBECONFIG": settings.kubeconfig},
+    config: dict[str, Any] = {
+        "command": mcp_config.command,
+        "args": list(mcp_config.args),
     }
 
+    # Add environment variables if any (filter out empty values)
+    env = {k: v for k, v in mcp_config.env.items() if v}
+    if env:
+        config["env"] = env
+    elif mcp_config.in_cluster_fallback:
+        # No env vars set but in_cluster_fallback is True
+        # Add --in-cluster to args if not already present
+        if "--in-cluster" not in config["args"]:
+            config["args"].append("--in-cluster")
 
-def get_mc_mcp_config() -> dict[str, Any]:
+    return config
+
+
+def build_mcp_servers_from_config(
+    config: ShootConfig,
+    assistant_name: str,
+) -> dict[str, dict[str, Any]]:
     """
-    Get MCP server configuration for management cluster.
+    Build MCP server configurations for an assistant from config.
 
-    Uses MC_KUBECONFIG if set (local development),
-    otherwise uses --in-cluster mode (production).
+    Only includes MCP servers that are used by the assistant's subagents.
+
+    Args:
+        config: ShootConfig object
+        assistant_name: Name of the assistant
+
+    Returns:
+        Dict of MCP server name -> configuration
     """
-    settings = get_settings()
+    assistant = config.get_assistant(assistant_name)
+    mcp_servers: dict[str, dict[str, Any]] = {}
 
-    if settings.mc_kubeconfig:
-        # Local development: use kubeconfig file
-        return {
-            "command": settings.mcp_kubernetes_path,
-            "args": ["serve", "--non-destructive"],
-            "env": {"KUBECONFIG": settings.mc_kubeconfig},
-        }
-    else:
-        # Production: use in-cluster service account
-        return {
-            "command": settings.mcp_kubernetes_path,
-            "args": ["serve", "--non-destructive", "--in-cluster"],
-        }
+    # Collect all MCP servers used by the assistant's subagents
+    for subagent_name in assistant.subagents:
+        subagent = config.get_subagent(subagent_name)
+        for mcp_name in subagent.mcp_servers:
+            if mcp_name not in mcp_servers:
+                mcp_config = config.get_mcp_server(mcp_name)
+                mcp_servers[mcp_name] = build_mcp_config_from_schema(mcp_config)
+
+    return mcp_servers
 
 
-# =============================================================================
-# Agent Definitions
-# =============================================================================
-
-# MCP tool names for mcp-kubernetes server
-# These are the read-only tools exposed by mcp-kubernetes in --non-destructive mode
-# Tool naming convention: mcp__<server_name>__<tool_name>
-WC_MCP_TOOLS = [
-    "mcp__kubernetes_wc__get",
-    "mcp__kubernetes_wc__list",
-    "mcp__kubernetes_wc__describe",
-    "mcp__kubernetes_wc__logs",
-    "mcp__kubernetes_wc__events",
-]
-
-MC_MCP_TOOLS = [
-    "mcp__kubernetes_mc__get",
-    "mcp__kubernetes_mc__list",
-    "mcp__kubernetes_mc__describe",
-    "mcp__kubernetes_mc__logs",
-    "mcp__kubernetes_mc__events",
-]
-
-
-def create_agent_definitions() -> dict[str, AgentDefinition]:
+def get_tools_for_subagent(
+    config: ShootConfig,
+    subagent_name: str,
+) -> list[str]:
     """
-    Create AgentDefinitions for the collector subagents.
+    Get the list of tool names a subagent can access.
 
-    These are used with ClaudeSDKClient to define specialized subagents
-    that the coordinator can delegate to via the Task tool.
+    Args:
+        config: ShootConfig object
+        subagent_name: Name of the subagent
 
-    IMPORTANT: Each collector is restricted to only its own MCP server's tools
-    to maintain strict isolation between workload and management clusters.
+    Returns:
+        List of tool names (e.g., ["mcp__kubernetes_wc__get", ...])
     """
-    settings = get_settings()
+    from config_schema import get_tools_for_mcp
 
-    return {
-        "wc_collector": AgentDefinition(
-            description=(
-                "Use this agent to collect runtime data from the WORKLOAD CLUSTER. "
-                "The WC collector gathers information about Pods, Deployments, Services, "
-                "ReplicaSets, events, logs, and other Kubernetes resources running in the "
-                "workload cluster. Use this as your PRIMARY data source for debugging. "
-                "This agent does NOT have access to management cluster resources."
-            ),
-            prompt=get_wc_collector_prompt(),
-            tools=WC_MCP_TOOLS,  # Strict isolation: only WC MCP tools
-            model=settings.collector_model,  # type: ignore[arg-type]
-        ),
-        "mc_collector": AgentDefinition(
-            description=(
-                "Use this agent to collect data from the MANAGEMENT CLUSTER. "
-                "The MC collector gathers information about App/HelmRelease deployment status "
-                "and CAPI/CAPA resources (Cluster, AWSCluster, Machine, MachinePool) for the "
-                "workload cluster. Use this ONLY when you need to check deployment status or "
-                "cluster infrastructure. This agent does NOT have access to workload cluster resources."
-            ),
-            prompt=get_mc_collector_prompt(),
-            tools=MC_MCP_TOOLS,  # Strict isolation: only MC MCP tools
-            model=settings.collector_model,  # type: ignore[arg-type]
-        ),
-    }
+    subagent = config.get_subagent(subagent_name)
+    tools: list[str] = []
+
+    for mcp_name in subagent.mcp_servers:
+        mcp_config = config.get_mcp_server(mcp_name)
+        tools.extend(get_tools_for_mcp(mcp_name, mcp_config.tools))
+
+    return tools
+
+
+def build_agent_definitions_from_config(
+    config: ShootConfig,
+    assistant_name: str,
+    config_base_dir: Path,
+) -> dict[str, AgentDefinition]:
+    """
+    Build AgentDefinitions for an assistant's subagents from config.
+
+    Args:
+        config: ShootConfig object
+        assistant_name: Name of the assistant
+        config_base_dir: Base directory for resolving prompt file paths
+
+    Returns:
+        Dict of subagent name -> AgentDefinition
+    """
+    from config_loader import get_prompt_with_variables
+
+    assistant = config.get_assistant(assistant_name)
+    agents: dict[str, AgentDefinition] = {}
+
+    for subagent_name in assistant.subagents:
+        subagent = config.get_subagent(subagent_name)
+
+        # Load and process the prompt
+        prompt = get_prompt_with_variables(
+            config=config,
+            base_dir=config_base_dir,
+            prompt_file=subagent.system_prompt_file,
+            variables={},  # Subagents don't have prompt variables currently
+        )
+
+        # Get the tools this subagent can access
+        tools = get_tools_for_subagent(config, subagent_name)
+
+        # Resolve model
+        model = config.resolve_model(subagent.model, is_orchestrator=False)
+
+        agents[subagent_name] = AgentDefinition(
+            description=subagent.description.strip(),
+            prompt=prompt,
+            tools=tools,
+            model=model,  # type: ignore[arg-type]
+        )
+
+    return agents
 
 
 # =============================================================================
@@ -127,16 +165,20 @@ def create_agent_definitions() -> dict[str, AgentDefinition]:
 
 
 def get_mcp_configs_valid() -> tuple[bool, bool]:
-    """Check if MCP configurations are valid (configs can be created)."""
-    try:
-        wc_valid = get_wc_mcp_config() is not None
-    except Exception:
-        wc_valid = False
+    """
+    Check if MCP configurations are valid.
 
-    try:
-        mc_valid = get_mc_mcp_config() is not None
-    except Exception:
-        mc_valid = False
+    Uses the configuration file to validate MCP servers are defined.
+    Returns (wc_valid, mc_valid) tuple.
+    """
+    from config_loader import get_config
+
+    config = get_config()
+    if config is None:
+        return False, False
+
+    wc_valid = "kubernetes_wc" in config.mcp_servers
+    mc_valid = "kubernetes_mc" in config.mcp_servers
 
     return wc_valid, mc_valid
 

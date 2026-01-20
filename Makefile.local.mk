@@ -26,7 +26,7 @@ docker-run: ## Run Docker container with local kubeconfigs
 		-v $(PWD)/$(LOCAL_CONFIG_DIR)/wc-kubeconfig.yaml:/k8s/wc-kubeconfig.yaml:ro \
 		-v $(PWD)/$(LOCAL_CONFIG_DIR)/mc-kubeconfig.yaml:/k8s/mc-kubeconfig.yaml:ro \
 		-v $(PWD)/$(LOCAL_CONFIG_DIR):/app/config:ro \
-		-v $(PWD)/config/prompts:/app/src/prompts:ro \
+		-v $(PWD)/config/prompts:/app/config/prompts:ro \
 		-e KUBECONFIG=/k8s/wc-kubeconfig.yaml \
 		-e MC_KUBECONFIG=/k8s/mc-kubeconfig.yaml \
 		-e SHOOT_CONFIG=/app/config/shoot.yaml \
@@ -35,7 +35,7 @@ docker-run: ## Run Docker container with local kubeconfigs
 
 .PHONY: local-setup
 local-setup: ## Create local_config directory with templates
-	@mkdir -p $(LOCAL_CONFIG_DIR)/schemas
+	@mkdir -p $(LOCAL_CONFIG_DIR)/schemas $(LOCAL_CONFIG_DIR)/prompts
 	@if [ ! -f $(LOCAL_CONFIG_DIR)/.env ]; then \
 		cp .env.example $(LOCAL_CONFIG_DIR)/.env; \
 		echo "Created $(LOCAL_CONFIG_DIR)/.env - edit with your ANTHROPIC_API_KEY"; \
@@ -48,13 +48,17 @@ local-setup: ## Create local_config directory with templates
 		cp config/schemas/diagnostic_report.json $(LOCAL_CONFIG_DIR)/schemas/; \
 		echo "Created $(LOCAL_CONFIG_DIR)/schemas/diagnostic_report.json"; \
 	fi
+	@if [ ! -f $(LOCAL_CONFIG_DIR)/prompts/coordinator_prompt.md ]; then \
+		cp config/prompts/*.md $(LOCAL_CONFIG_DIR)/prompts/; \
+		echo "Created $(LOCAL_CONFIG_DIR)/prompts/*.md - customize as needed"; \
+	fi
 	@echo ""
 	@echo "Setup instructions:"
 	@echo "  1. Edit $(LOCAL_CONFIG_DIR)/.env with your ANTHROPIC_API_KEY"
 	@echo "  2. Place your kubeconfigs in $(LOCAL_CONFIG_DIR)/:"
 	@echo "     - wc-kubeconfig.yaml (workload cluster)"
 	@echo "     - mc-kubeconfig.yaml (management cluster)"
-	@echo "  3. Customize $(LOCAL_CONFIG_DIR)/shoot.yaml as needed"
+	@echo "  3. Customize $(LOCAL_CONFIG_DIR)/shoot.yaml and prompts as needed"
 
 .PHONY: local-kubeconfig
 local-kubeconfig: ## Login to clusters via tsh and create kubeconfigs. Usage: make -f Makefile.local.mk local-kubeconfig MC=<cluster> [WC=<cluster>]

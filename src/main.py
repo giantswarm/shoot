@@ -188,6 +188,28 @@ async def get_assistant_schema(assistant_name: str) -> dict[str, Any]:
     }
 
 
+def _validate_assistant(assistant_name: str | None) -> None:
+    """Validate that assistant name is provided and exists in config."""
+    if not assistant_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Assistant name is required. Use /assistants to list available assistants.",
+        )
+
+    config = get_config()
+    if config is None:
+        raise HTTPException(
+            status_code=503,
+            detail="SHOOT_CONFIG not set - configuration file is required",
+        )
+    if assistant_name not in config.assistants:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Assistant '{assistant_name}' not found. "
+            f"Available: {list(config.assistants.keys())}",
+        )
+
+
 def _get_response_schema_info(
     assistant_name: str | None,
 ) -> tuple[ResponseFormat, dict[str, Any] | None]:
@@ -276,11 +298,8 @@ async def run(request: Request) -> Any:
                 raise HTTPException(status_code=400, detail="Query is required")
 
             assistant_name = data.get("assistant")
-            if not assistant_name:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Assistant name is required. Use /assistants to list available assistants.",
-                )
+            _validate_assistant(assistant_name)
+
             timeout_seconds = data.get("timeout_seconds") or settings.timeout_seconds
             max_turns = data.get("max_turns")
             want_structured = data.get("structured", False)
@@ -387,11 +406,8 @@ async def run_stream(request: Request) -> StreamingResponse:
             raise HTTPException(status_code=400, detail="Query is required")
 
         assistant_name = data.get("assistant")
-        if not assistant_name:
-            raise HTTPException(
-                status_code=400,
-                detail="Assistant name is required. Use /assistants to list available assistants.",
-            )
+        _validate_assistant(assistant_name)
+
         timeout_seconds = data.get("timeout_seconds") or settings.timeout_seconds
         max_turns = data.get("max_turns")
         request_variables = data.get("variables", {})

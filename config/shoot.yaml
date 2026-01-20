@@ -59,7 +59,7 @@ subagents:
       ReplicaSets, events, logs, and other Kubernetes resources running in the
       workload cluster. Use this as your PRIMARY data source for debugging.
       This agent does NOT have access to management cluster resources.
-    system_prompt_file: ../src/prompts/wc_collector_prompt.md
+    system_prompt_file: prompts/wc_collector_prompt.md
     mcp_servers: [kubernetes_wc]
 
   mc_collector:
@@ -69,14 +69,14 @@ subagents:
       and CAPI/CAPA resources (Cluster, AWSCluster, Machine, MachinePool) for the
       workload cluster. Use this ONLY when you need to check deployment status or
       cluster infrastructure. This agent does NOT have access to workload cluster resources.
-    system_prompt_file: ../src/prompts/mc_collector_prompt.md
+    system_prompt_file: prompts/mc_collector_prompt.md
     mcp_servers: [kubernetes_mc]
 
 # Assistant definitions (orchestrators that coordinate investigations)
 assistants:
   kubernetes_debugger:
     description: "General Kubernetes debugging assistant for investigating cluster issues"
-    system_prompt_file: ../src/prompts/coordinator_prompt.md
+    system_prompt_file: prompts/coordinator_prompt.md
     allowed_tools: [Task]
     subagents: [wc_collector, mc_collector]
     response_schema: diagnostic_report

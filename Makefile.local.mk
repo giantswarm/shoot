@@ -26,7 +26,7 @@ docker-run: ## Run Docker container with local kubeconfigs
 		-v $(PWD)/$(LOCAL_CONFIG_DIR)/wc-kubeconfig.yaml:/k8s/wc-kubeconfig.yaml:ro \
 		-v $(PWD)/$(LOCAL_CONFIG_DIR)/mc-kubeconfig.yaml:/k8s/mc-kubeconfig.yaml:ro \
 		-v $(PWD)/$(LOCAL_CONFIG_DIR):/app/config:ro \
-		-v $(PWD)/src/prompts:/app/src/prompts:ro \
+		-v $(PWD)/config/prompts:/app/src/prompts:ro \
 		-e KUBECONFIG=/k8s/wc-kubeconfig.yaml \
 		-e MC_KUBECONFIG=/k8s/mc-kubeconfig.yaml \
 		-e SHOOT_CONFIG=/app/config/shoot.yaml \

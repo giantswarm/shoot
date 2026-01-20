@@ -14,14 +14,19 @@ docker-build: ## Build Docker image locally
 .PHONY: docker-run
 docker-run: ## Run Docker container with local kubeconfigs
 	@if [ ! -f $(LOCAL_CONFIG_DIR)/.env ]; then \
-		echo "Error: $(LOCAL_CONFIG_DIR)/.env not found. Copy .env.example to $(LOCAL_CONFIG_DIR)/.env and configure it."; \
+		echo "Error: $(LOCAL_CONFIG_DIR)/.env not found. Run 'make -f Makefile.local.mk local-setup' first."; \
+		exit 1; \
+	fi
+	@if [ ! -f $(LOCAL_CONFIG_DIR)/shoot.yaml ]; then \
+		echo "Error: $(LOCAL_CONFIG_DIR)/shoot.yaml not found. Run 'make -f Makefile.local.mk local-setup' first."; \
 		exit 1; \
 	fi
 	docker run --rm -it \
 		--env-file $(LOCAL_CONFIG_DIR)/.env \
 		-v $(PWD)/$(LOCAL_CONFIG_DIR)/wc-kubeconfig.yaml:/k8s/wc-kubeconfig.yaml:ro \
 		-v $(PWD)/$(LOCAL_CONFIG_DIR)/mc-kubeconfig.yaml:/k8s/mc-kubeconfig.yaml:ro \
-		-v $(PWD)/config:/app/config:ro \
+		-v $(PWD)/$(LOCAL_CONFIG_DIR):/app/config:ro \
+		-v $(PWD)/src/prompts:/app/src/prompts:ro \
 		-e KUBECONFIG=/k8s/wc-kubeconfig.yaml \
 		-e MC_KUBECONFIG=/k8s/mc-kubeconfig.yaml \
 		-e SHOOT_CONFIG=/app/config/shoot.yaml \
@@ -30,10 +35,18 @@ docker-run: ## Run Docker container with local kubeconfigs
 
 .PHONY: local-setup
 local-setup: ## Create local_config directory with templates
-	@mkdir -p $(LOCAL_CONFIG_DIR)
+	@mkdir -p $(LOCAL_CONFIG_DIR)/schemas
 	@if [ ! -f $(LOCAL_CONFIG_DIR)/.env ]; then \
 		cp .env.example $(LOCAL_CONFIG_DIR)/.env; \
 		echo "Created $(LOCAL_CONFIG_DIR)/.env - edit with your ANTHROPIC_API_KEY"; \
+	fi
+	@if [ ! -f $(LOCAL_CONFIG_DIR)/shoot.yaml ]; then \
+		cp config/shoot.yaml $(LOCAL_CONFIG_DIR)/shoot.yaml; \
+		echo "Created $(LOCAL_CONFIG_DIR)/shoot.yaml - customize as needed"; \
+	fi
+	@if [ ! -f $(LOCAL_CONFIG_DIR)/schemas/diagnostic_report.json ]; then \
+		cp config/schemas/diagnostic_report.json $(LOCAL_CONFIG_DIR)/schemas/; \
+		echo "Created $(LOCAL_CONFIG_DIR)/schemas/diagnostic_report.json"; \
 	fi
 	@echo ""
 	@echo "Setup instructions:"
@@ -41,8 +54,7 @@ local-setup: ## Create local_config directory with templates
 	@echo "  2. Place your kubeconfigs in $(LOCAL_CONFIG_DIR)/:"
 	@echo "     - wc-kubeconfig.yaml (workload cluster)"
 	@echo "     - mc-kubeconfig.yaml (management cluster)"
-	@echo "  3. Configuration file: config/shoot.yaml (default)"
-	@echo "     - Customize or set SHOOT_CONFIG to use a different config file"
+	@echo "  3. Customize $(LOCAL_CONFIG_DIR)/shoot.yaml as needed"
 
 .PHONY: local-kubeconfig
 local-kubeconfig: ## Login to clusters via tsh and create kubeconfigs. Usage: make -f Makefile.local.mk local-kubeconfig MC=<cluster> [WC=<cluster>]
@@ -106,11 +118,15 @@ local-run: local-deps ## Run locally with uvicorn using local_config/.env and ku
 		echo "Error: $(LOCAL_CONFIG_DIR)/wc-kubeconfig.yaml not found. Run 'make -f Makefile.local.mk local-kubeconfig MC=<cluster>' first."; \
 		exit 1; \
 	fi
+	@if [ ! -f $(LOCAL_CONFIG_DIR)/shoot.yaml ]; then \
+		echo "Error: $(LOCAL_CONFIG_DIR)/shoot.yaml not found. Run 'make -f Makefile.local.mk local-setup' first."; \
+		exit 1; \
+	fi
 	@set -a && . $(LOCAL_CONFIG_DIR)/.env && set +a && \
 		KUBECONFIG=$(PWD)/$(LOCAL_CONFIG_DIR)/wc-kubeconfig.yaml \
 		MC_KUBECONFIG=$(PWD)/$(LOCAL_CONFIG_DIR)/mc-kubeconfig.yaml \
 		MCP_KUBERNETES_PATH=$${MCP_KUBERNETES_PATH:-$(PWD)/$(LOCAL_CONFIG_DIR)/mcp-kubernetes} \
-		SHOOT_CONFIG=$${SHOOT_CONFIG:-$(PWD)/config/shoot.yaml} \
+		SHOOT_CONFIG=$(PWD)/$(LOCAL_CONFIG_DIR)/shoot.yaml \
 		PYTHONPATH=$(PWD)/src \
 		uv run uvicorn src.main:app --reload --port 8000
 

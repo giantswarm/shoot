@@ -119,7 +119,7 @@ local-query: ## Send a test query to the local server. Usage: make -f Makefile.l
 	@tmpfile=$$(mktemp); \
 	curl -s http://localhost:8000/ \
 		-H "Content-Type: application/json" \
-		-d '{"query": "$(if $(Q),$(Q),List all namespaces in the workload cluster)"$(if $(A),$(comma) "assistant": "$(A)",)}' \
+		-d '{"query": "$(if $(Q),$(Q),List all namespaces in the workload cluster)", "assistant": "$(if $(A),$(A),kubernetes_debugger)"}' \
 		> $$tmpfile; \
 	jq -r '.result' $$tmpfile; \
 	echo; \

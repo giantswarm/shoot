@@ -118,7 +118,7 @@ def create_coordinator_options_from_config(
 
 
 def get_coordinator_options(
-    assistant_name: str | None = None,
+    assistant_name: str,
     timeout_seconds: int | None = None,
     max_turns: int | None = None,
     request_variables: dict[str, str] | None = None,
@@ -127,7 +127,7 @@ def get_coordinator_options(
     Get ClaudeAgentOptions from the configuration file.
 
     Args:
-        assistant_name: Name of assistant to use (uses first available if None)
+        assistant_name: Name of assistant to use (required)
         timeout_seconds: Optional timeout override
         max_turns: Optional max turns override
         request_variables: Variables from the request for prompt injection
@@ -136,7 +136,7 @@ def get_coordinator_options(
         ClaudeAgentOptions for the coordinator
 
     Raises:
-        ValueError: If SHOOT_CONFIG is not set or config is invalid
+        ValueError: If SHOOT_CONFIG is not set, assistant not found, or config is invalid
     """
     config = get_config()
 
@@ -146,13 +146,11 @@ def get_coordinator_options(
             "Configuration file is required to run Shoot."
         )
 
-    if not assistant_name:
-        # Use first available assistant as default
+    if assistant_name not in config.assistants:
         available = list(config.assistants.keys())
-        if not available:
-            raise ValueError("No assistants defined in configuration")
-        assistant_name = available[0]
-        logger.info(f"No assistant specified, using default: {assistant_name}")
+        raise ValueError(
+            f"Assistant '{assistant_name}' not found. Available: {available}"
+        )
 
     config_base_dir = get_config_base_dir()
     if config_base_dir is None:
@@ -170,7 +168,7 @@ def get_coordinator_options(
 
 async def run_coordinator(  # noqa: C901
     query_text: str,
-    assistant_name: str | None = None,
+    assistant_name: str,
     timeout_seconds: int | None = None,
     max_turns: int | None = None,
     request_variables: dict[str, str] | None = None,
@@ -183,7 +181,7 @@ async def run_coordinator(  # noqa: C901
 
     Args:
         query_text: High-level failure description (e.g., "Deployment not ready")
-        assistant_name: Name of assistant to use (None = default/legacy)
+        assistant_name: Name of assistant to use (required)
         timeout_seconds: Optional timeout override
         max_turns: Optional max turns override
         request_variables: Variables from the request for prompt injection
@@ -322,7 +320,7 @@ async def run_coordinator(  # noqa: C901
 
 async def run_coordinator_streaming(
     query_text: str,
-    assistant_name: str | None = None,
+    assistant_name: str,
     timeout_seconds: int | None = None,
     max_turns: int | None = None,
     request_variables: dict[str, str] | None = None,
@@ -335,7 +333,7 @@ async def run_coordinator_streaming(
 
     Args:
         query_text: High-level failure description
-        assistant_name: Name of assistant to use (None = default/legacy)
+        assistant_name: Name of assistant to use (required)
         timeout_seconds: Optional timeout override
         max_turns: Optional max turns override
         request_variables: Variables from the request for prompt injection
@@ -399,15 +397,23 @@ def get_structured_report(result_text: str) -> DiagnosticReport | None:
     return parse_markdown_report(result_text)
 
 
-def is_coordinator_ready(assistant_name: str | None = None) -> bool:
+def is_coordinator_ready() -> bool:
     """
     Check if the coordinator can be created.
 
-    Args:
-        assistant_name: Optional assistant name to check (None = default)
+    Validates that the configuration is loaded and at least one assistant exists.
     """
     try:
-        get_coordinator_options(assistant_name=assistant_name)
+        config = get_config()
+        if config is None:
+            logger.error("Coordinator not ready: SHOOT_CONFIG not set")
+            return False
+        if not config.assistants:
+            logger.error("Coordinator not ready: No assistants defined")
+            return False
+        # Try to create options for first assistant to validate config
+        first_assistant = list(config.assistants.keys())[0]
+        get_coordinator_options(assistant_name=first_assistant)
         return True
     except Exception as e:
         logger.error(f"Coordinator not ready: {e}")

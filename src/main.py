@@ -33,7 +33,6 @@ from coordinator import (
     run_coordinator_streaming,
     is_coordinator_ready,
     get_structured_report,
-    get_available_assistants,
     InvestigationResult,
 )
 from response_formatter import (
@@ -238,7 +237,7 @@ async def run(request: Request) -> Any:
     Request body:
         {
             "query": "Description of the issue, e.g., 'Deployment not ready'",
-            "assistant": "kubernetes_debugger",  // optional, assistant name
+            "assistant": "kubernetes_debugger",  // required, assistant name
             "timeout_seconds": 300,  // optional, default 300
             "max_turns": 15,         // optional, default 15
             "structured": false,     // optional, return structured JSON if parseable
@@ -277,6 +276,11 @@ async def run(request: Request) -> Any:
                 raise HTTPException(status_code=400, detail="Query is required")
 
             assistant_name = data.get("assistant")
+            if not assistant_name:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Assistant name is required. Use /assistants to list available assistants.",
+                )
             timeout_seconds = data.get("timeout_seconds") or settings.timeout_seconds
             max_turns = data.get("max_turns")
             want_structured = data.get("structured", False)
@@ -287,7 +291,7 @@ async def run(request: Request) -> Any:
             span.set_attribute("assistant", assistant_name or "default")
 
             logger.info(
-                f"Starting investigation request_id={request_id} "
+                f"Starting request_id={request_id} "
                 f"assistant={assistant_name or 'default'} "
                 f"query_length={len(query)} timeout={timeout_seconds}s"
             )
@@ -319,7 +323,7 @@ async def run(request: Request) -> Any:
             response: dict[str, Any] = {
                 "result": investigation_result["result"],
                 "request_id": request_id,
-                "assistant": assistant_name or get_available_assistants()[0],
+                "assistant": assistant_name,
                 "metrics": {
                     "duration_ms": investigation_result["duration_ms"],
                     "num_turns": investigation_result["num_turns"],
@@ -362,7 +366,7 @@ async def run_stream(request: Request) -> StreamingResponse:
     Request body:
         {
             "query": "Description of the issue, e.g., 'Deployment not ready'",
-            "assistant": "kubernetes_debugger",  // optional, assistant name
+            "assistant": "kubernetes_debugger",  // required, assistant name
             "timeout_seconds": 300,  // optional, default 300
             "max_turns": 15,         // optional, default 15
             "variables": {}          // optional, request variables
@@ -383,13 +387,18 @@ async def run_stream(request: Request) -> StreamingResponse:
             raise HTTPException(status_code=400, detail="Query is required")
 
         assistant_name = data.get("assistant")
+        if not assistant_name:
+            raise HTTPException(
+                status_code=400,
+                detail="Assistant name is required. Use /assistants to list available assistants.",
+            )
         timeout_seconds = data.get("timeout_seconds") or settings.timeout_seconds
         max_turns = data.get("max_turns")
         request_variables = data.get("variables", {})
 
         logger.info(
             f"Starting streaming investigation request_id={request_id} "
-            f"assistant={assistant_name or 'default'} "
+            f"assistant={assistant_name} "
             f"query_length={len(query)} timeout={timeout_seconds}s"
         )
 

@@ -41,21 +41,27 @@ spec:
               containerPort: 8000
               protocol: TCP
           env:
-            - name: OPENAI_API_KEY
+            - name: HOME
+              value: /home/app
+            - name: ANTHROPIC_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: openai-api-key
-                  key: OPENAI_API_KEY
+                  name: anthropic-api-key
+                  key: ANTHROPIC_API_KEY
+            - name: ANTHROPIC_COORDINATOR_MODEL
+              value: {{ .Values.anthropicCoordinatorModel }}
+            - name: ANTHROPIC_COLLECTOR_MODEL
+              value: {{ .Values.anthropicCollectorModel }}
+            - name: OTEL_METRICS_EXPORTER
+              value: "otlp"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: {{ .Values.otelExporterOtlpEndpoint }}
+            - name: OTEL_SERVICE_NAME
+              value: {{ .Values.otelServiceName }}
             - name: OTEL_RESOURCE_ATTRIBUTES
-              value: service.name=shoot
+              value: service.name={{ .Values.otelServiceName }}
             - name: KUBECONFIG
               value: /k8s/kubeconfig.yaml
-            - name: OPENAI_COORDINATOR_MODEL
-              value: {{ .Values.openaiCoodrinatorModel }}
-            - name: OPENAI_COLLECTOR_MODEL
-              value: {{ .Values.openaiCollectorModel }}
             - name: WC_CLUSTER
               value: {{ .Values.clusterID }}
             - name: ORG_NS
@@ -67,6 +73,8 @@ spec:
           volumeMounts:
             - name: kubeconfig
               mountPath: /k8s
+            - name: home
+              mountPath: /home/app
           {{- with .Values.volumeMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -85,6 +93,8 @@ spec:
             items:
               - key: value
                 path: kubeconfig.yaml
+        - name: home
+          emptyDir: {}
       {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}

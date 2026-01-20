@@ -5,8 +5,17 @@
         "affinity": {
             "type": "object"
         },
+        "anthropicCoordinatorModel": {
+            "type": "string"
+        },
+        "anthropicCollectorModel": {
+            "type": "string"
+        },
         "clusterID": {
             "type": "string"
+        },
+        "debug": {
+            "type": "boolean"
         },
         "fullnameOverride": {
             "type": "string"
@@ -31,16 +40,19 @@
         "imagePullSecrets": {
             "type": "array"
         },
+        "livenessProbe": {
+            "type": "object"
+        },
         "nameOverride": {
             "type": "string"
         },
         "nodeSelector": {
             "type": "object"
         },
-        "openaiModel": {
+        "otelExporterOtlpEndpoint": {
             "type": "string"
         },
-        "otelExporterOtlpEndpoint": {
+        "otelServiceName": {
             "type": "string"
         },
         "podAnnotations": {
@@ -65,6 +77,9 @@
                     "type": "integer"
                 }
             }
+        },
+        "readinessProbe": {
+            "type": "object"
         },
         "replicaCount": {
             "type": "integer"
@@ -142,6 +157,20 @@
                     "type": "integer"
                 },
                 "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "serviceAccount": {
+            "type": "object",
+            "properties": {
+                "create": {
+                    "type": "boolean"
+                },
+                "annotations": {
+                    "type": "object"
+                },
+                "name": {
                     "type": "string"
                 }
             }

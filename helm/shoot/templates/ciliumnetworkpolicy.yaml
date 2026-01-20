@@ -19,4 +19,3 @@ spec:
     # Allow internet access (all external traffic)
     - toEntities:
         - world
-

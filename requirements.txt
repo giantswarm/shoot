@@ -1,7 +1,8 @@
-pydantic-ai-slim[mcp]
-pydantic-ai-slim[openai]
+claude-agent-sdk
+anthropic
 opentelemetry-sdk
 opentelemetry-exporter-otlp
 fastapi
 uvicorn
 anyio
+pydantic-settings

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `mcp_servers` field in `AssistantConfig` allows orchestrators to access MCP servers directly, not just via subagent delegation
+- `url` field in `MCPServerConfig` enables HTTP remote MCP servers as an alternative to local command-based servers
 
 ## [3.0.0] - 2026-01-20
 

@@ -101,10 +101,10 @@ class ResponseSchemaConfig(BaseModel):
 
 
 class MCPServerConfig(BaseModel):
-    """Configuration for an MCP server."""
+    """Configuration for an MCP server (local command or remote HTTP)."""
 
     command: str = Field(
-        ...,
+        default="",
         description="Path to MCP server executable (supports ${VAR} expansion)",
     )
     args: list[str] = Field(
@@ -115,6 +115,10 @@ class MCPServerConfig(BaseModel):
         default_factory=dict,
         description="Environment variables (supports ${VAR} and ${VAR:-default})",
     )
+    url: str = Field(
+        default="",
+        description="HTTP URL for remote MCP server (alternative to command)",
+    )
     tools: list[str] = Field(
         default_factory=list,
         description="List of tool names exposed by this MCP server",
@@ -123,6 +127,25 @@ class MCPServerConfig(BaseModel):
         default=False,
         description="If True, use --in-cluster mode when env vars are not set",
     )
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str) -> str:
+        """Validate URL is HTTP/HTTPS if provided."""
+        if v and not v.startswith(("http://", "https://")):
+            raise ValueError("MCP server URL must start with http:// or https://")
+        return v
+
+    def model_post_init(self, __context: Any) -> None:
+        """Validate that either command or url is provided."""
+        if not self.command and not self.url:
+            raise ValueError(
+                "MCP server must have either 'command' or 'url' configured"
+            )
+        if self.command and self.url:
+            raise ValueError(
+                "MCP server cannot have both 'command' and 'url' configured"
+            )
 
 
 class SubagentConfig(BaseModel):

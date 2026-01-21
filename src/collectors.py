@@ -31,12 +31,19 @@ def build_mcp_config_from_schema(
     """
     Build an MCP server configuration dict from a schema config.
 
+    Supports both local command-based and remote HTTP-based MCP servers.
+
     Args:
         mcp_config: MCPServerConfig from the config schema
 
     Returns:
         Dict suitable for ClaudeAgentOptions.mcp_servers
     """
+    # Remote HTTP MCP server
+    if mcp_config.url:
+        return {"url": mcp_config.url}
+
+    # Local command-based MCP server
     config: dict[str, Any] = {
         "command": mcp_config.command,
         "args": list(mcp_config.args),

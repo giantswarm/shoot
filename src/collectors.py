@@ -62,7 +62,7 @@ def build_mcp_servers_from_config(
     """
     Build MCP server configurations for an assistant from config.
 
-    Only includes MCP servers that are used by the assistant's subagents.
+    Includes MCP servers used by the assistant directly and by its subagents.
 
     Args:
         config: ShootConfig object
@@ -74,7 +74,13 @@ def build_mcp_servers_from_config(
     assistant = config.get_assistant(assistant_name)
     mcp_servers: dict[str, dict[str, Any]] = {}
 
-    # Collect all MCP servers used by the assistant's subagents
+    # Collect MCP servers used directly by the assistant
+    for mcp_name in assistant.mcp_servers:
+        if mcp_name not in mcp_servers:
+            mcp_config = config.get_mcp_server(mcp_name)
+            mcp_servers[mcp_name] = build_mcp_config_from_schema(mcp_config)
+
+    # Collect MCP servers used by the assistant's subagents
     for subagent_name in assistant.subagents:
         subagent = config.get_subagent(subagent_name)
         for mcp_name in subagent.mcp_servers:
@@ -105,6 +111,32 @@ def get_tools_for_subagent(
     tools: list[str] = []
 
     for mcp_name in subagent.mcp_servers:
+        mcp_config = config.get_mcp_server(mcp_name)
+        tools.extend(get_tools_for_mcp(mcp_name, mcp_config.tools))
+
+    return tools
+
+
+def get_tools_for_assistant(
+    config: ShootConfig,
+    assistant_name: str,
+) -> list[str]:
+    """
+    Get the list of MCP tool names an assistant can access directly.
+
+    Args:
+        config: ShootConfig object
+        assistant_name: Name of the assistant
+
+    Returns:
+        List of tool names (e.g., ["mcp__kubernetes_wc__get", ...])
+    """
+    from config_schema import get_tools_for_mcp
+
+    assistant = config.get_assistant(assistant_name)
+    tools: list[str] = []
+
+    for mcp_name in assistant.mcp_servers:
         mcp_config = config.get_mcp_server(mcp_name)
         tools.extend(get_tools_for_mcp(mcp_name, mcp_config.tools))
 

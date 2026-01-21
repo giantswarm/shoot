@@ -50,6 +50,9 @@ mcp_servers:
       - logs
       - events
 
+  backstage_mcp:
+    command: ${MCP_BACKSTAGE_PATH:-/usr/local/bin/mcp-backstage
+
 # Subagent definitions (collectors that gather data from specific sources)
 subagents:
   wc_collector:
@@ -72,7 +75,7 @@ subagents:
     system_prompt_file: prompts/mc_collector_prompt.md
     mcp_servers: [kubernetes_mc]
 
-# Assistant definitions (orchestrators that coordinate investigations)
+# Assistant definitions
 assistants:
   kubernetes_debugger:
     description: "General Kubernetes debugging assistant for investigating cluster issues"
@@ -80,6 +83,14 @@ assistants:
     allowed_tools: [Task]
     subagents: [wc_collector, mc_collector]
     response_schema: diagnostic_report
+    prompt_variables:
+      WC_CLUSTER: ${WC_CLUSTER:-workload cluster}
+      ORG_NS: ${ORG_NS:-organization namespace}
+  backstage:
+    description: "Backstage assistant"
+    system_prompt_file: prompts/backstage/coordinator_prompt.md
+    allowed_tools: [backstage_mcp]
+    mcp_servers: [backstage_mcp]
     prompt_variables:
       WC_CLUSTER: ${WC_CLUSTER:-workload cluster}
       ORG_NS: ${ORG_NS:-organization namespace}

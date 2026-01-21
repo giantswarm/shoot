@@ -177,6 +177,10 @@ class AssistantConfig(BaseModel):
         default_factory=lambda: ["Task"],
         description="Tools the orchestrator can use (typically just 'Task')",
     )
+    mcp_servers: list[str] = Field(
+        default_factory=list,
+        description="MCP servers the orchestrator can access directly",
+    )
     subagents: list[str] = Field(
         default_factory=list,
         description="List of subagent names this assistant can delegate to",

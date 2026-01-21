@@ -31,6 +31,7 @@ from app_logging import logger
 from collectors import (
     build_mcp_servers_from_config,
     build_agent_definitions_from_config,
+    get_tools_for_assistant,
 )
 from config import get_settings
 from config_schema import ShootConfig
@@ -106,11 +107,16 @@ def create_coordinator_options_from_config(
         assistant.max_turns, is_investigation=True
     )
 
+    # Build allowed_tools: configured tools + MCP tools for direct access
+    allowed_tools = list(assistant.allowed_tools)
+    mcp_tools = get_tools_for_assistant(config, assistant_name)
+    allowed_tools.extend(mcp_tools)
+
     return ClaudeAgentOptions(
         system_prompt=system_prompt,
         model=model,
         mcp_servers=mcp_servers,  # type: ignore[arg-type]
-        allowed_tools=assistant.allowed_tools,
+        allowed_tools=allowed_tools,
         agents=agents,
         permission_mode="bypassPermissions",
         max_turns=resolved_max_turns,

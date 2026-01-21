@@ -49,7 +49,7 @@ local-setup: ## Create local_config directory with templates
 		echo "Created $(LOCAL_CONFIG_DIR)/schemas/diagnostic_report.json"; \
 	fi
 	@if [ ! -f $(LOCAL_CONFIG_DIR)/prompts/coordinator_prompt.md ]; then \
-		cp config/prompts/*.md $(LOCAL_CONFIG_DIR)/prompts/; \
+		cp -R config/prompts/* $(LOCAL_CONFIG_DIR)/prompts/; \
 		echo "Created $(LOCAL_CONFIG_DIR)/prompts/*.md - customize as needed"; \
 	fi
 	@echo ""
@@ -113,7 +113,7 @@ local-deps: ## Create .venv and install/sync dependencies
 	@uv pip install -r requirements.txt
 
 .PHONY: local-run
-local-run: local-deps ## Run locally with uvicorn using local_config/.env and kubeconfigs
+local-run: local-deps ## Run locally with uvicorn. Usage: make -f Makefile.local.mk local-run [DEFAULT_CONFIG=1]
 	@if [ ! -f $(LOCAL_CONFIG_DIR)/.env ]; then \
 		echo "Error: $(LOCAL_CONFIG_DIR)/.env not found. Run 'make -f Makefile.local.mk local-setup' first."; \
 		exit 1; \
@@ -122,15 +122,21 @@ local-run: local-deps ## Run locally with uvicorn using local_config/.env and ku
 		echo "Error: $(LOCAL_CONFIG_DIR)/wc-kubeconfig.yaml not found. Run 'make -f Makefile.local.mk local-kubeconfig MC=<cluster>' first."; \
 		exit 1; \
 	fi
-	@if [ ! -f $(LOCAL_CONFIG_DIR)/shoot.yaml ]; then \
-		echo "Error: $(LOCAL_CONFIG_DIR)/shoot.yaml not found. Run 'make -f Makefile.local.mk local-setup' first."; \
-		exit 1; \
-	fi
-	@set -a && . $(LOCAL_CONFIG_DIR)/.env && set +a && \
+	@if [ -z "$(DEFAULT_CONFIG)" ]; then \
+		if [ ! -f $(LOCAL_CONFIG_DIR)/shoot.yaml ]; then \
+			echo "Error: $(LOCAL_CONFIG_DIR)/shoot.yaml not found. Run 'make -f Makefile.local.mk local-setup' first."; \
+			exit 1; \
+		fi; \
+		CONFIG_PATH=$(PWD)/$(LOCAL_CONFIG_DIR)/shoot.yaml; \
+	else \
+		CONFIG_PATH=$(PWD)/config/shoot.yaml; \
+		echo "Using default config: $$CONFIG_PATH"; \
+	fi && \
+	set -a && . $(LOCAL_CONFIG_DIR)/.env && set +a && \
 		KUBECONFIG=$(PWD)/$(LOCAL_CONFIG_DIR)/wc-kubeconfig.yaml \
 		MC_KUBECONFIG=$(PWD)/$(LOCAL_CONFIG_DIR)/mc-kubeconfig.yaml \
 		MCP_KUBERNETES_PATH=$${MCP_KUBERNETES_PATH:-$(PWD)/$(LOCAL_CONFIG_DIR)/mcp-kubernetes} \
-		SHOOT_CONFIG=$(PWD)/$(LOCAL_CONFIG_DIR)/shoot.yaml \
+		SHOOT_CONFIG=$$CONFIG_PATH \
 		PYTHONPATH=$(PWD)/src \
 		uv run uvicorn src.main:app --reload --port 8000
 

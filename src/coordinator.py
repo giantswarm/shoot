@@ -232,7 +232,7 @@ async def run_coordinator(  # noqa: C901
             turn_count = 0
             async for message in client.receive_response():
                 # Log all message types to debug
-                logger.info(f"Received message type: {type(message).__name__}")
+                logger.debug(f"Received message type: {type(message).__name__}")
 
                 if isinstance(message, AssistantMessage):
                     turn_count += 1

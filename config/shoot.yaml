@@ -76,7 +76,7 @@ subagents:
 assistants:
   kubernetes_debugger:
     description: "General Kubernetes debugging assistant for investigating cluster issues"
-    system_prompt_file: prompts/coordinator_prompt.md
+    system_prompt_file: prompts/kubernetes_debugger/coordinator_prompt.md
     allowed_tools: [Task]
     subagents: [wc_collector, mc_collector]
     response_schema: diagnostic_report

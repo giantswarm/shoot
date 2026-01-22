@@ -1,8 +1,8 @@
 """
-Configuration schema models for the Shoot multi-assistant system.
+Configuration schema models for the Shoot multi-agent system.
 
 This module defines Pydantic models for YAML configuration files that
-enable configurable assistants, MCP servers, and response schemas.
+enable configurable agents, MCP servers, and response schemas.
 """
 
 from enum import Enum
@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class ResponseFormat(str, Enum):
-    """Output format for assistant responses."""
+    """Output format for agent responses."""
 
     HUMAN = "human"  # Human-readable markdown
     JSON = "json"  # Raw JSON for machine consumption
@@ -181,12 +181,12 @@ class SubagentConfig(BaseModel):
     )
 
 
-class AssistantConfig(BaseModel):
-    """Configuration for an assistant (orchestrator)."""
+class AgentConfig(BaseModel):
+    """Configuration for an agent (orchestrator)."""
 
     description: str = Field(
         ...,
-        description="Human-readable description of this assistant",
+        description="Human-readable description of this agent",
     )
     system_prompt_file: str = Field(
         ...,
@@ -206,7 +206,7 @@ class AssistantConfig(BaseModel):
     )
     subagents: list[str] = Field(
         default_factory=list,
-        description="List of subagent names this assistant can delegate to",
+        description="List of subagent names this agent can delegate to",
     )
     response_schema: str = Field(
         default="",
@@ -245,7 +245,7 @@ class AssistantConfig(BaseModel):
 
 class ShootConfig(BaseModel):
     """
-    Root configuration for the Shoot multi-assistant system.
+    Root configuration for the Shoot multi-agent system.
 
     This is the top-level model that represents a complete shoot.yaml configuration.
     """
@@ -270,17 +270,17 @@ class ShootConfig(BaseModel):
         default_factory=dict,
         description="Subagent definitions (name -> config)",
     )
-    assistants: dict[str, AssistantConfig] = Field(
+    agents: dict[str, AgentConfig] = Field(
         default_factory=dict,
-        description="Assistant definitions (name -> config)",
+        description="Agent definitions (name -> config)",
     )
 
-    def get_assistant(self, name: str) -> AssistantConfig:
-        """Get an assistant by name, raising KeyError if not found."""
-        if name not in self.assistants:
-            available = list(self.assistants.keys())
-            raise KeyError(f"Assistant '{name}' not found. Available: {available}")
-        return self.assistants[name]
+    def get_agent(self, name: str) -> AgentConfig:
+        """Get an agent by name, raising KeyError if not found."""
+        if name not in self.agents:
+            available = list(self.agents.keys())
+            raise KeyError(f"Agent '{name}' not found. Available: {available}")
+        return self.agents[name]
 
     def get_subagent(self, name: str) -> SubagentConfig:
         """Get a subagent by name, raising KeyError if not found."""
@@ -353,9 +353,9 @@ def validate_config_references(config: ShootConfig) -> list[str]:
     Validate that all references in the config are valid.
 
     Checks:
-    - Assistant subagents exist
+    - Agent subagents exist
     - Subagent mcp_servers exist
-    - Assistant response_schemas exist
+    - Agent response_schemas exist
     - No circular references
 
     Returns:
@@ -363,22 +363,22 @@ def validate_config_references(config: ShootConfig) -> list[str]:
     """
     errors: list[str] = []
 
-    # Check assistant references
-    for assistant_name, assistant in config.assistants.items():
+    # Check agent references
+    for agent_name, agent in config.agents.items():
         # Check subagent references
-        for subagent_name in assistant.subagents:
+        for subagent_name in agent.subagents:
             if subagent_name not in config.subagents:
                 errors.append(
-                    f"Assistant '{assistant_name}' references unknown subagent '{subagent_name}'"
+                    f"Agent '{agent_name}' references unknown subagent '{subagent_name}'"
                 )
 
         # Check response schema reference
         if (
-            assistant.response_schema
-            and assistant.response_schema not in config.response_schemas
+            agent.response_schema
+            and agent.response_schema not in config.response_schemas
         ):
             errors.append(
-                f"Assistant '{assistant_name}' references unknown response_schema '{assistant.response_schema}'"
+                f"Agent '{agent_name}' references unknown response_schema '{agent.response_schema}'"
             )
 
     # Check subagent references

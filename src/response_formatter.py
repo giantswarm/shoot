@@ -1,5 +1,5 @@
 """
-Response formatting for the Shoot multi-assistant system.
+Response formatting for the Shoot multi-agent system.
 
 This module handles:
 - Loading JSON Schema files for response validation
@@ -15,28 +15,28 @@ from config_schema import ShootConfig, ResponseSchemaConfig, ResponseFormat
 from config_loader import resolve_path, load_json_schema, ConfigError
 
 
-def get_schema_for_assistant(
+def get_schema_for_agent(
     config: ShootConfig,
-    assistant_name: str,
+    agent_name: str,
     config_base_dir: Path,
 ) -> tuple[dict[str, Any] | None, ResponseSchemaConfig | None]:
     """
-    Get the JSON Schema and config for an assistant's response schema.
+    Get the JSON Schema and config for an agent's response schema.
 
     Args:
         config: ShootConfig object
-        assistant_name: Name of the assistant
+        agent_name: Name of the agent
         config_base_dir: Base directory for resolving schema file paths
 
     Returns:
         Tuple of (schema_dict, schema_config), both None if no schema configured
     """
-    assistant = config.get_assistant(assistant_name)
+    agent = config.get_agent(agent_name)
 
-    if not assistant.response_schema:
+    if not agent.response_schema:
         return None, None
 
-    schema_config = config.get_response_schema(assistant.response_schema)
+    schema_config = config.get_response_schema(agent.response_schema)
     if schema_config is None:
         return None, None
 

@@ -108,7 +108,7 @@ class Settings(BaseSettings):
     shoot_config: str = Field(
         default="",
         validation_alias="SHOOT_CONFIG",
-        description="Path to YAML configuration file for multi-assistant mode",
+        description="Path to YAML configuration file for multi-agent mode",
     )
 
 

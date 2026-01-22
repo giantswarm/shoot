@@ -31,7 +31,7 @@ from app_logging import logger
 from collectors import (
     build_mcp_servers_from_config,
     build_agent_definitions_from_config,
-    get_tools_for_assistant,
+    get_tools_for_agent,
 )
 from config import get_settings
 from config_schema import ShootConfig
@@ -53,35 +53,35 @@ class InvestigationResult(TypedDict):
 
 def create_coordinator_options_from_config(
     config: ShootConfig,
-    assistant_name: str,
+    agent_name: str,
     config_base_dir: Path,
     timeout_seconds: int | None = None,
     max_turns: int | None = None,
     request_variables: dict[str, str] | None = None,
 ) -> ClaudeAgentOptions:
     """
-    Create ClaudeAgentOptions for a configured assistant.
+    Create ClaudeAgentOptions for a configured agent.
 
     Args:
         config: ShootConfig object
-        assistant_name: Name of the assistant to use
+        agent_name: Name of the agent to use
         config_base_dir: Base directory for resolving paths
         timeout_seconds: Optional timeout override
         max_turns: Optional max turns override
         request_variables: Variables from the request for prompt injection
 
     Returns:
-        ClaudeAgentOptions configured for the specified assistant
+        ClaudeAgentOptions configured for the specified agent
     """
-    assistant = config.get_assistant(assistant_name)
+    agent = config.get_agent(agent_name)
 
     # Build prompt variables from config + request
     prompt_vars: dict[str, str] = {}
-    for key, value in assistant.prompt_variables.items():
+    for key, value in agent.prompt_variables.items():
         prompt_vars[key] = value
     if request_variables:
         # Only include allowed request variables
-        for key in assistant.request_variables:
+        for key in agent.request_variables:
             if key in request_variables:
                 prompt_vars[key] = request_variables[key]
 
@@ -89,27 +89,25 @@ def create_coordinator_options_from_config(
     system_prompt = get_prompt_with_variables(
         config=config,
         base_dir=config_base_dir,
-        prompt_file=assistant.system_prompt_file,
+        prompt_file=agent.system_prompt_file,
         variables=prompt_vars,
     )
 
     # Build MCP servers
-    mcp_servers = build_mcp_servers_from_config(config, assistant_name)
+    mcp_servers = build_mcp_servers_from_config(config, agent_name)
 
     # Build agent definitions
-    agents = build_agent_definitions_from_config(
-        config, assistant_name, config_base_dir
-    )
+    agents = build_agent_definitions_from_config(config, agent_name, config_base_dir)
 
     # Resolve model and limits
-    model = config.resolve_model(assistant.model, is_orchestrator=True)
+    model = config.resolve_model(agent.model, is_orchestrator=True)
     resolved_max_turns = max_turns or config.resolve_max_turns(
-        assistant.max_turns, is_investigation=True
+        agent.max_turns, is_investigation=True
     )
 
     # Build allowed_tools: configured tools + MCP tools for direct access
-    allowed_tools = list(assistant.allowed_tools)
-    mcp_tools = get_tools_for_assistant(config, assistant_name)
+    allowed_tools = list(agent.allowed_tools)
+    mcp_tools = get_tools_for_agent(config, agent_name)
     allowed_tools.extend(mcp_tools)
 
     return ClaudeAgentOptions(
@@ -124,7 +122,7 @@ def create_coordinator_options_from_config(
 
 
 def get_coordinator_options(
-    assistant_name: str,
+    agent_name: str,
     timeout_seconds: int | None = None,
     max_turns: int | None = None,
     request_variables: dict[str, str] | None = None,
@@ -133,7 +131,7 @@ def get_coordinator_options(
     Get ClaudeAgentOptions from the configuration file.
 
     Args:
-        assistant_name: Name of assistant to use (required)
+        agent_name: Name of agent to use (required)
         timeout_seconds: Optional timeout override
         max_turns: Optional max turns override
         request_variables: Variables from the request for prompt injection
@@ -142,7 +140,7 @@ def get_coordinator_options(
         ClaudeAgentOptions for the coordinator
 
     Raises:
-        ValueError: If SHOOT_CONFIG is not set, assistant not found, or config is invalid
+        ValueError: If SHOOT_CONFIG is not set, agent not found, or config is invalid
     """
     config = get_config()
 
@@ -152,11 +150,9 @@ def get_coordinator_options(
             "Configuration file is required to run Shoot."
         )
 
-    if assistant_name not in config.assistants:
-        available = list(config.assistants.keys())
-        raise ValueError(
-            f"Assistant '{assistant_name}' not found. Available: {available}"
-        )
+    if agent_name not in config.agents:
+        available = list(config.agents.keys())
+        raise ValueError(f"Agent '{agent_name}' not found. Available: {available}")
 
     config_base_dir = get_config_base_dir()
     if config_base_dir is None:
@@ -164,7 +160,7 @@ def get_coordinator_options(
 
     return create_coordinator_options_from_config(
         config=config,
-        assistant_name=assistant_name,
+        agent_name=agent_name,
         config_base_dir=config_base_dir,
         timeout_seconds=timeout_seconds,
         max_turns=max_turns,
@@ -174,7 +170,7 @@ def get_coordinator_options(
 
 async def run_coordinator(  # noqa: C901
     query_text: str,
-    assistant_name: str,
+    agent_name: str,
     timeout_seconds: int | None = None,
     max_turns: int | None = None,
     request_variables: dict[str, str] | None = None,
@@ -187,7 +183,7 @@ async def run_coordinator(  # noqa: C901
 
     Args:
         query_text: High-level failure description (e.g., "Deployment not ready")
-        assistant_name: Name of assistant to use (required)
+        agent_name: Name of agent to use (required)
         timeout_seconds: Optional timeout override
         max_turns: Optional max turns override
         request_variables: Variables from the request for prompt injection
@@ -201,13 +197,13 @@ async def run_coordinator(  # noqa: C901
         "coordinator.investigate",
         {
             "query": query_text[:200],
-            "assistant": assistant_name or "default",
+            "agent": agent_name or "default",
             "timeout_seconds": timeout_seconds or settings.timeout_seconds,
             "max_turns": max_turns or settings.max_turns,
         },
     ) as _span:  # noqa: F841
         options = get_coordinator_options(
-            assistant_name=assistant_name,
+            agent_name=agent_name,
             timeout_seconds=timeout_seconds,
             max_turns=max_turns,
             request_variables=request_variables,
@@ -326,7 +322,7 @@ async def run_coordinator(  # noqa: C901
 
 async def run_coordinator_streaming(
     query_text: str,
-    assistant_name: str,
+    agent_name: str,
     timeout_seconds: int | None = None,
     max_turns: int | None = None,
     request_variables: dict[str, str] | None = None,
@@ -339,7 +335,7 @@ async def run_coordinator_streaming(
 
     Args:
         query_text: High-level failure description
-        assistant_name: Name of assistant to use (required)
+        agent_name: Name of agent to use (required)
         timeout_seconds: Optional timeout override
         max_turns: Optional max turns override
         request_variables: Variables from the request for prompt injection
@@ -351,12 +347,12 @@ async def run_coordinator_streaming(
         "coordinator.investigate.streaming",
         {
             "query": query_text[:200],
-            "assistant": assistant_name or "default",
+            "agent": agent_name or "default",
             "streaming": True,
         },
     ) as _span:  # noqa: F841
         options = get_coordinator_options(
-            assistant_name=assistant_name,
+            agent_name=agent_name,
             timeout_seconds=timeout_seconds,
             max_turns=max_turns,
             request_variables=request_variables,
@@ -407,31 +403,31 @@ def is_coordinator_ready() -> bool:
     """
     Check if the coordinator can be created.
 
-    Validates that the configuration is loaded and at least one assistant exists.
+    Validates that the configuration is loaded and at least one agent exists.
     """
     try:
         config = get_config()
         if config is None:
             logger.error("Coordinator not ready: SHOOT_CONFIG not set")
             return False
-        if not config.assistants:
-            logger.error("Coordinator not ready: No assistants defined")
+        if not config.agents:
+            logger.error("Coordinator not ready: No agents defined")
             return False
-        # Try to create options for first assistant to validate config
-        first_assistant = list(config.assistants.keys())[0]
-        get_coordinator_options(assistant_name=first_assistant)
+        # Try to create options for first agent to validate config
+        first_agent = list(config.agents.keys())[0]
+        get_coordinator_options(agent_name=first_agent)
         return True
     except Exception as e:
         logger.error(f"Coordinator not ready: {e}")
         return False
 
 
-def get_available_assistants() -> list[str]:
+def get_available_agents() -> list[str]:
     """
-    Get list of available assistant names from configuration.
+    Get list of available agent names from configuration.
 
     Returns:
-        List of assistant names defined in the configuration
+        List of agent names defined in the configuration
 
     Raises:
         ValueError: If SHOOT_CONFIG is not set
@@ -439,4 +435,4 @@ def get_available_assistants() -> list[str]:
     config = get_config()
     if config is None:
         raise ValueError("SHOOT_CONFIG environment variable not set")
-    return list(config.assistants.keys())
+    return list(config.agents.keys())

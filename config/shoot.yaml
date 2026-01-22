@@ -1,8 +1,8 @@
-# Shoot Multi-Assistant Configuration
-# This file defines assistants, subagents, MCP servers, and response schemas.
+# Shoot Multi-Agent Configuration
+# This file defines agents, subagents, MCP servers, and response schemas.
 version: "1.0"
 
-# Default configurations (can be overridden per assistant/subagent)
+# Default configurations (can be overridden per agent/subagent)
 defaults:
   models:
     orchestrator: ${ANTHROPIC_COORDINATOR_MODEL:-claude-sonnet-4-5-20250514}
@@ -51,7 +51,7 @@ mcp_servers:
       - events
 
   backstage_mcp:
-    command: ${MCP_BACKSTAGE_PATH:-/usr/local/bin/mcp-backstage
+    url: ${MCP_BACKSTAGE_PATH:-/usr/local/bin/mcp-backstage
 
 # Subagent definitions (collectors that gather data from specific sources)
 subagents:
@@ -75,11 +75,11 @@ subagents:
     system_prompt_file: prompts/mc_collector_prompt.md
     mcp_servers: [kubernetes_mc]
 
-# Assistant definitions
-assistants:
-  kubernetes_debugger:
+# Agent definitions
+agents:
+  e2e-debugger:
     description: "General Kubernetes debugging assistant for investigating cluster issues"
-    system_prompt_file: prompts/kubernetes_debugger/coordinator_prompt.md
+    system_prompt_file: prompts/e2e-debugger/coordinator_prompt.md
     allowed_tools: [Task]
     subagents: [wc_collector, mc_collector]
     response_schema: diagnostic_report

@@ -1,5 +1,5 @@
 """
-Configuration loader for the Shoot multi-assistant system.
+Configuration loader for the Shoot multi-agent system.
 
 This module handles:
 - Loading YAML configuration files
@@ -281,11 +281,11 @@ def validate_file_references(config: ShootConfig, base_dir: Path) -> list[str]:
         if not path.exists():
             errors.append(f"Response schema '{name}' file not found: {path}")
 
-    # Check assistant prompt files
-    for name, assistant in config.assistants.items():
-        path = resolve_path(base_dir, assistant.system_prompt_file)
+    # Check agent prompt files
+    for name, agent in config.agents.items():
+        path = resolve_path(base_dir, agent.system_prompt_file)
         if not path.exists():
-            errors.append(f"Assistant '{name}' prompt file not found: {path}")
+            errors.append(f"Agent '{name}' prompt file not found: {path}")
 
     # Check subagent prompt files
     for name, subagent in config.subagents.items():

@@ -11,8 +11,8 @@ Architecture:
 
 Configuration:
 - Set SHOOT_CONFIG to point to the configuration file (required)
-- Different assistants for different use cases (debugging, alerts, E2E tests)
-- Each assistant has its own prompts, subagents, and response schema
+- Different agents for different use cases (debugging, alerts, E2E tests)
+- Each agent has its own prompts, subagents, and response schema
 """
 
 import asyncio
@@ -36,7 +36,7 @@ from coordinator import (
     InvestigationResult,
 )
 from response_formatter import (
-    get_schema_for_assistant,
+    get_schema_for_agent,
     parse_structured_response,
     validate_response,
 )
@@ -90,7 +90,7 @@ async def ready(deep: bool = False) -> dict[str, Any]:
         "kubernetes_wc": wc_valid,
         "kubernetes_mc": mc_valid,
         "coordinator": coordinator_ready,
-        "assistants": list(config.assistants.keys()),
+        "agents": list(config.agents.keys()),
     }
 
     # Deep check: validate actual cluster connectivity
@@ -113,13 +113,13 @@ async def ready(deep: bool = False) -> dict[str, Any]:
     return checks
 
 
-@app.get("/assistants")
-async def list_assistants() -> dict[str, Any]:
+@app.get("/agents")
+async def list_agents() -> dict[str, Any]:
     """
-    List available assistants and their configurations.
+    List available agents and their configurations.
 
     Returns:
-        Dictionary with assistant names and their descriptions
+        Dictionary with agent names and their descriptions
     """
     config = get_config()
     if config is None:
@@ -128,28 +128,28 @@ async def list_assistants() -> dict[str, Any]:
             detail="SHOOT_CONFIG not set - configuration file is required",
         )
 
-    assistants: dict[str, Any] = {}
-    for name, assistant in config.assistants.items():
-        assistants[name] = {
-            "description": assistant.description,
-            "subagents": assistant.subagents,
-            "response_schema": assistant.response_schema or None,
-            "request_variables": assistant.request_variables,
+    agents: dict[str, Any] = {}
+    for name, agent in config.agents.items():
+        agents[name] = {
+            "description": agent.description,
+            "subagents": agent.subagents,
+            "response_schema": agent.response_schema or None,
+            "request_variables": agent.request_variables,
         }
 
-    return {"assistants": assistants}
+    return {"agents": agents}
 
 
-@app.get("/assistants/{assistant_name}/schema")
-async def get_assistant_schema(assistant_name: str) -> dict[str, Any]:
+@app.get("/agents/{agent_name}/schema")
+async def get_agent_schema(agent_name: str) -> dict[str, Any]:
     """
-    Get the JSON Schema for an assistant's response format.
+    Get the JSON Schema for an agent's response format.
 
     Args:
-        assistant_name: Name of the assistant
+        agent_name: Name of the agent
 
     Returns:
-        JSON Schema for the assistant's response format
+        JSON Schema for the agent's response format
     """
     config = get_config()
     if config is None:
@@ -158,42 +158,40 @@ async def get_assistant_schema(assistant_name: str) -> dict[str, Any]:
             detail="SHOOT_CONFIG not set - configuration file is required",
         )
 
-    if assistant_name not in config.assistants:
+    if agent_name not in config.agents:
         raise HTTPException(
             status_code=404,
-            detail=f"Assistant '{assistant_name}' not found. "
-            f"Available: {list(config.assistants.keys())}",
+            detail=f"Agent '{agent_name}' not found. "
+            f"Available: {list(config.agents.keys())}",
         )
 
     config_base_dir = get_config_base_dir()
     if config_base_dir is None:
         raise HTTPException(status_code=500, detail="Config base directory not found")
 
-    schema, schema_config = get_schema_for_assistant(
-        config, assistant_name, config_base_dir
-    )
+    schema, schema_config = get_schema_for_agent(config, agent_name, config_base_dir)
 
     if schema is None:
         return {
-            "assistant": assistant_name,
+            "agent": agent_name,
             "schema": None,
-            "message": "No response schema configured for this assistant",
+            "message": "No response schema configured for this agent",
         }
 
     return {
-        "assistant": assistant_name,
+        "agent": agent_name,
         "schema": schema,
         "format": schema_config.format.value if schema_config else "human",
         "description": schema_config.description if schema_config else "",
     }
 
 
-def _validate_assistant(assistant_name: str | None) -> None:
-    """Validate that assistant name is provided and exists in config."""
-    if not assistant_name:
+def _validate_agent(agent_name: str | None) -> None:
+    """Validate that agent name is provided and exists in config."""
+    if not agent_name:
         raise HTTPException(
             status_code=400,
-            detail="Assistant name is required. Use /assistants to list available assistants.",
+            detail="Agent name is required. Use /agents to list available agents.",
         )
 
     config = get_config()
@@ -202,29 +200,27 @@ def _validate_assistant(assistant_name: str | None) -> None:
             status_code=503,
             detail="SHOOT_CONFIG not set - configuration file is required",
         )
-    if assistant_name not in config.assistants:
+    if agent_name not in config.agents:
         raise HTTPException(
             status_code=404,
-            detail=f"Assistant '{assistant_name}' not found. "
-            f"Available: {list(config.assistants.keys())}",
+            detail=f"Agent '{agent_name}' not found. "
+            f"Available: {list(config.agents.keys())}",
         )
 
 
 def _get_response_schema_info(
-    assistant_name: str | None,
+    agent_name: str | None,
 ) -> tuple[ResponseFormat, dict[str, Any] | None]:
-    """Get response format and schema for an assistant."""
+    """Get response format and schema for an agent."""
     config = get_config()
-    if config is None or not assistant_name:
+    if config is None or not agent_name:
         return ResponseFormat.HUMAN, None
 
     config_base_dir = get_config_base_dir()
     if not config_base_dir:
         return ResponseFormat.HUMAN, None
 
-    schema, schema_config = get_schema_for_assistant(
-        config, assistant_name, config_base_dir
-    )
+    schema, schema_config = get_schema_for_agent(config, agent_name, config_base_dir)
     response_format = schema_config.format if schema_config else ResponseFormat.HUMAN
     return response_format, schema
 
@@ -259,7 +255,7 @@ async def run(request: Request) -> Any:
     Request body:
         {
             "query": "Description of the issue, e.g., 'Deployment not ready'",
-            "assistant": "kubernetes_debugger",  // required, assistant name
+            "agent": "kubernetes_debugger",  // required, agent name
             "timeout_seconds": 300,  // optional, default 300
             "max_turns": 15,         // optional, default 15
             "structured": false,     // optional, return structured JSON if parseable
@@ -270,7 +266,7 @@ async def run(request: Request) -> Any:
         {
             "result": "Diagnostic report with findings and recommendations",
             "request_id": "uuid",
-            "assistant": "kubernetes_debugger",
+            "agent": "kubernetes_debugger",
             "metrics": {
                 "duration_ms": 12345,
                 "num_turns": 8,
@@ -282,7 +278,7 @@ async def run(request: Request) -> Any:
         If structured=true and output is parseable:
         {"result": "...", "structured": {...}, "metrics": {...}, "request_id": "uuid"}
 
-        For JSON-format assistants, returns raw JSON response.
+        For JSON-format agents, returns raw JSON response.
     """
     request_id = str(uuid.uuid4())
     request_id_ctx.set(request_id)
@@ -297,8 +293,8 @@ async def run(request: Request) -> Any:
             if not query:
                 raise HTTPException(status_code=400, detail="Query is required")
 
-            assistant_name = data.get("assistant")
-            _validate_assistant(assistant_name)
+            agent_name = data.get("agent")
+            _validate_agent(agent_name)
 
             timeout_seconds = data.get("timeout_seconds") or settings.timeout_seconds
             max_turns = data.get("max_turns")
@@ -307,11 +303,11 @@ async def run(request: Request) -> Any:
 
             span.set_attribute("query_length", len(query))
             span.set_attribute("timeout_seconds", timeout_seconds)
-            span.set_attribute("assistant", assistant_name or "default")
+            span.set_attribute("agent", agent_name or "default")
 
             logger.info(
                 f"Starting request_id={request_id} "
-                f"assistant={assistant_name or 'default'} "
+                f"agent={agent_name or 'default'} "
                 f"query_length={len(query)} timeout={timeout_seconds}s"
             )
 
@@ -320,7 +316,7 @@ async def run(request: Request) -> Any:
                 async with asyncio.timeout(http_timeout):
                     investigation_result: InvestigationResult = await run_coordinator(
                         query,
-                        assistant_name=assistant_name,
+                        agent_name=agent_name,
                         timeout_seconds=timeout_seconds,
                         max_turns=max_turns,
                         request_variables=request_variables,
@@ -338,11 +334,11 @@ async def run(request: Request) -> Any:
                     },
                 )
 
-            response_format, schema = _get_response_schema_info(assistant_name)
+            response_format, schema = _get_response_schema_info(agent_name)
             response: dict[str, Any] = {
                 "result": investigation_result["result"],
                 "request_id": request_id,
-                "assistant": assistant_name,
+                "agent": agent_name,
                 "metrics": {
                     "duration_ms": investigation_result["duration_ms"],
                     "num_turns": investigation_result["num_turns"],
@@ -385,7 +381,7 @@ async def run_stream(request: Request) -> StreamingResponse:
     Request body:
         {
             "query": "Description of the issue, e.g., 'Deployment not ready'",
-            "assistant": "kubernetes_debugger",  // required, assistant name
+            "agent": "kubernetes_debugger",  // required, agent name
             "timeout_seconds": 300,  // optional, default 300
             "max_turns": 15,         // optional, default 15
             "variables": {}          // optional, request variables
@@ -405,8 +401,8 @@ async def run_stream(request: Request) -> StreamingResponse:
         if not query:
             raise HTTPException(status_code=400, detail="Query is required")
 
-        assistant_name = data.get("assistant")
-        _validate_assistant(assistant_name)
+        agent_name = data.get("agent")
+        _validate_agent(agent_name)
 
         timeout_seconds = data.get("timeout_seconds") or settings.timeout_seconds
         max_turns = data.get("max_turns")
@@ -414,7 +410,7 @@ async def run_stream(request: Request) -> StreamingResponse:
 
         logger.info(
             f"Starting streaming investigation request_id={request_id} "
-            f"assistant={assistant_name} "
+            f"agent={agent_name} "
             f"query_length={len(query)} timeout={timeout_seconds}s"
         )
 
@@ -422,7 +418,7 @@ async def run_stream(request: Request) -> StreamingResponse:
             try:
                 async for chunk in run_coordinator_streaming(
                     query,
-                    assistant_name=assistant_name,
+                    agent_name=agent_name,
                     timeout_seconds=timeout_seconds,
                     max_turns=max_turns,
                     request_variables=request_variables,
@@ -464,6 +460,6 @@ async def get_schema() -> dict[str, Any]:
     This schema describes the expected output format when the coordinator
     successfully generates a structured diagnostic report.
 
-    Note: Use /assistants/{name}/schema for assistant-specific schemas.
+    Note: Use /agents/{name}/schema for agent-specific schemas.
     """
     return DIAGNOSTIC_REPORT_SCHEMA

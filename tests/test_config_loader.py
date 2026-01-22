@@ -268,7 +268,7 @@ defaults:
             config_path.write_text(
                 """
 version: '1.0'
-assistants:
+agents:
   test:
     description: Test
     system_prompt_file: prompt.md
@@ -286,7 +286,7 @@ assistants:
             config_path.write_text(
                 """
 version: '1.0'
-assistants:
+agents:
   test:
     description: Test
     system_prompt_file: nonexistent.md

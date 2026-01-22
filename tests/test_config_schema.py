@@ -12,7 +12,7 @@ from config_schema import (  # noqa: E402
     ShootConfig,
     MCPServerConfig,
     SubagentConfig,
-    AssistantConfig,
+    AgentConfig,
     ResponseSchemaConfig,
     ResponseFormat,
     Defaults,
@@ -101,22 +101,22 @@ class TestSubagentConfig:
         assert config.max_turns == 10
 
 
-class TestAssistantConfig:
-    """Tests for AssistantConfig model."""
+class TestAgentConfig:
+    """Tests for AgentConfig model."""
 
     def test_minimal_config(self) -> None:
-        config = AssistantConfig(
-            description="Test assistant",
+        config = AgentConfig(
+            description="Test agent",
             system_prompt_file="prompts/coordinator.md",
         )
-        assert config.description == "Test assistant"
+        assert config.description == "Test agent"
         assert config.allowed_tools == ["Task"]
         assert config.subagents == []
         assert config.response_schema == ""
 
     def test_full_config(self) -> None:
-        config = AssistantConfig(
-            description="Test assistant",
+        config = AgentConfig(
+            description="Test agent",
             system_prompt_file="prompts/coordinator.md",
             model="claude-sonnet-4-5-20250514",
             allowed_tools=["Task"],
@@ -161,7 +161,7 @@ class TestShootConfig:
         assert config.version == "1.0"
         assert config.mcp_servers == {}
         assert config.subagents == {}
-        assert config.assistants == {}
+        assert config.agents == {}
 
     def test_full_config(self) -> None:
         config = ShootConfig(
@@ -179,8 +179,8 @@ class TestShootConfig:
                     mcp_servers=["kubernetes_wc"],
                 ),
             },
-            assistants={
-                "kubernetes_debugger": AssistantConfig(
+            agents={
+                "kubernetes_debugger": AgentConfig(
                     description="K8s debugger",
                     system_prompt_file="prompts/coord.md",
                     subagents=["wc_collector"],
@@ -189,24 +189,24 @@ class TestShootConfig:
         )
         assert "kubernetes_wc" in config.mcp_servers
         assert "wc_collector" in config.subagents
-        assert "kubernetes_debugger" in config.assistants
+        assert "kubernetes_debugger" in config.agents
 
-    def test_get_assistant(self) -> None:
+    def test_get_agent(self) -> None:
         config = ShootConfig(
-            assistants={
-                "test": AssistantConfig(
+            agents={
+                "test": AgentConfig(
                     description="Test",
                     system_prompt_file="test.md",
                 ),
             },
         )
-        assistant = config.get_assistant("test")
-        assert assistant.description == "Test"
+        agent = config.get_agent("test")
+        assert agent.description == "Test"
 
-    def test_get_assistant_not_found(self) -> None:
+    def test_get_agent_not_found(self) -> None:
         config = ShootConfig()
         with pytest.raises(KeyError):
-            config.get_assistant("nonexistent")
+            config.get_agent("nonexistent")
 
     def test_resolve_model_default(self) -> None:
         config = ShootConfig()
@@ -250,8 +250,8 @@ class TestValidateConfigReferences:
                     mcp_servers=["kubernetes_wc"],
                 ),
             },
-            assistants={
-                "debugger": AssistantConfig(
+            agents={
+                "debugger": AgentConfig(
                     description="Debug",
                     system_prompt_file="coord.md",
                     subagents=["wc_collector"],
@@ -263,8 +263,8 @@ class TestValidateConfigReferences:
 
     def test_invalid_subagent_reference(self) -> None:
         config = ShootConfig(
-            assistants={
-                "debugger": AssistantConfig(
+            agents={
+                "debugger": AgentConfig(
                     description="Debug",
                     system_prompt_file="coord.md",
                     subagents=["nonexistent"],

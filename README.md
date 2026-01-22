@@ -1,260 +1,307 @@
 # Shoot
 
-Kubernetes multi-agent system that helps:
+A configurable multi-agent AI system built on the [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk). Shoot enables you to define orchestrator agents that delegate tasks to specialized subagents, each with access to specific MCP (Model Context Protocol) servers.
 
-- **Automates investigation**: Transforms high-level failure signals into targeted diagnostic reports
-- **Coordinates multi-cluster debugging**: Seamlessly queries both workload and management clusters
-- **Optimizes cost and speed**: Uses powerful reasoning only for coordination, simpler models for data collection
-- **Provides structured output**: Returns concise, actionable diagnostic reports instead of raw data dumps
+## Architecture
 
-# Architecture
-
-Multi-agent system for Kubernetes E2E debugging:
-
-The system is workload-cluster-first: runtime evidence is gathered from the workload cluster; the management cluster is used only for App/HelmRelease deployment status and Cluster API (CAPI) object status.
-
-- **Coordinator Agent**: Orchestrates investigation, synthesizes findings from collectors, generates diagnostic reports. Uses a powerful reasoning model (configurable via `OPENAI_COORDINATOR_MODEL`).
-- **WC Collector Agent**: Collects diagnostic data from the workload cluster via Kubernetes MCP server (`workload_cluster_*` tools).
-- **MC Collector Agent**: Collects diagnostic data from the management cluster via Kubernetes MCP server (`management_cluster_*` tools).
-
-```mermaid
-graph TD
-    User[User Query] --> API[FastAPI Endpoint]
-    API --> Coordinator[Coordinator Agent<br/>High-level reasoning]
-
-    Coordinator -->|delegates| WC[WC Collector Agent<br/>Workload Cluster]
-    Coordinator -->|delegates| MC[MC Collector Agent<br/>Management Cluster]
-
-    WC -->|MCP tools| WC_K8s[Workload Cluster<br/>Kubernetes API]
-    MC -->|MCP tools| MC_K8s[Management Cluster<br/>Kubernetes API]
-
-    WC_K8s -->|data| WC
-    MC_K8s -->|data| MC
-
-    WC -->|findings| Coordinator
-    MC -->|findings| Coordinator
-
-    Coordinator -->|synthesizes| Report[Diagnostic Report]
-    Report --> API
-    API --> User
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              shoot.yaml                                     │
+│                         (Configuration File)                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            FastAPI Server                                   │
+│                         POST / • POST /stream                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         Coordinator Agent                                   │
+│                   (Orchestrates investigation)                              │
+│                                                                             │
+│   • Receives queries from API                                               │
+│   • Plans investigation strategy                                            │
+│   • Delegates to subagents via Task tool                                    │
+│   • Synthesizes findings into reports                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+                          │                   │
+              ┌───────────┘                   └───────────┐
+              ▼                                           ▼
+┌──────────────────────────────┐         ┌──────────────────────────────┐
+│     Subagent: Collector A    │         │     Subagent: Collector B    │
+│                              │         │                              │
+│  • Gathers data from MCP     │         │  • Gathers data from MCP     │
+│  • Returns findings          │         │  • Returns findings          │
+└──────────────────────────────┘         └──────────────────────────────┘
+              │                                           │
+              ▼                                           ▼
+┌──────────────────────────────┐         ┌──────────────────────────────┐
+│       MCP Server A           │         │       MCP Server B           │
+│   (kubernetes, backstage,    │         │   (kubernetes, backstage,    │
+│    or any MCP server)        │         │    or any MCP server)        │
+└──────────────────────────────┘         └──────────────────────────────┘
 ```
 
-# Local Development
+## Key Concepts
 
-## Prerequisites
+| Concept | Description |
+|---------|-------------|
+| **Agent** | Orchestrator that receives queries, plans investigations, and delegates to subagents |
+| **Subagent** | Specialized collector that gathers data from specific MCP servers |
+| **MCP Server** | External service providing tools (Kubernetes, Backstage, databases, etc.) |
+| **Response Schema** | JSON Schema defining the structure of agent outputs |
 
-- [Anthropic API key](https://console.anthropic.com/)
-- Access to Kubernetes clusters via [Teleport](https://goteleport.com/) (`tsh` CLI)
-- Docker (for containerized setup) or Python 3.11+ with [uv](https://github.com/astral-sh/uv) (for native setup)
+## Configuration
 
-## Quick Start
+All agents, subagents, and MCP servers are defined in a single YAML file:
 
-### 1. Initial Setup
+```yaml
+# shoot.yaml
+version: "1.0"
 
-Create the local configuration directory and templates:
+# Default settings (can be overridden per agent)
+defaults:
+  models:
+    orchestrator: claude-sonnet-4-5-20250514
+    collector: claude-3-5-haiku-20241022
+  timeouts:
+    investigation: 300
+    subagent: 60
+  max_turns:
+    investigation: 15
+    subagent: 10
 
-```bash
-make -f Makefile.local.mk local-setup
+# MCP Servers - external services providing tools
+mcp_servers:
+  kubernetes_prod:
+    command: /usr/local/bin/mcp-kubernetes
+    args: ["serve", "--non-destructive"]
+    env:
+      KUBECONFIG: ${KUBECONFIG}
+    tools: [get, list, describe, logs, events]
+
+  kubernetes_staging:
+    command: /usr/local/bin/mcp-kubernetes
+    args: ["serve", "--non-destructive"]
+    env:
+      KUBECONFIG: ${STAGING_KUBECONFIG}
+    tools: [get, list, describe, logs, events]
+
+  # Remote HTTP MCP server
+  backstage:
+    url: https://backstage-mcp.internal.example.com
+    tools: [search, get_component, get_api]
+
+# Subagents - data collectors with access to specific MCP servers
+subagents:
+  prod_collector:
+    description: |
+      Collects runtime data from the PRODUCTION Kubernetes cluster.
+      Use this for investigating production issues, pod status, logs, and events.
+    system_prompt_file: prompts/prod_collector_prompt.md
+    mcp_servers: [kubernetes_prod]
+
+  staging_collector:
+    description: |
+      Collects data from the STAGING Kubernetes cluster.
+      Use this for comparing staging vs production behavior.
+    system_prompt_file: prompts/staging_collector_prompt.md
+    mcp_servers: [kubernetes_staging]
+
+  catalog_collector:
+    description: |
+      Queries the Backstage service catalog for component ownership,
+      dependencies, and API documentation.
+    system_prompt_file: prompts/catalog_collector_prompt.md
+    mcp_servers: [backstage]
+
+# Agents - orchestrators that delegate to subagents
+agents:
+  kubernetes-debugger:
+    description: "Debug Kubernetes issues across environments"
+    system_prompt_file: prompts/debugger/coordinator_prompt.md
+    allowed_tools: [Task]
+    subagents: [prod_collector, staging_collector, catalog_collector]
+    response_schema: diagnostic_report
+    prompt_variables:
+      TEAM: ${TEAM_NAME:-platform}
+
+# Response schemas for structured output
+response_schemas:
+  diagnostic_report:
+    file: schemas/diagnostic_report.json
+    description: "Diagnostic report with summary and recommendations"
+    format: human
 ```
 
-This creates `local_config/` with a `.env` template.
+## Configuration Reference
 
-### 2. Configure Environment
+### Agent Configuration
 
-Edit `local_config/.env` and add your Anthropic API key:
-
-```bash
-ANTHROPIC_API_KEY=sk-ant-your-key-here
+```yaml
+agents:
+  my-agent:
+    description: "Human-readable description"
+    system_prompt_file: prompts/my_agent_prompt.md
+    model: claude-sonnet-4-5-20250514      # optional, uses default
+    allowed_tools: [Task]                   # tools the orchestrator can use
+    mcp_servers: []                         # direct MCP access (optional)
+    subagents: [collector_a, collector_b]   # subagents to delegate to
+    response_schema: my_schema              # output schema (optional)
+    timeout_seconds: 300                    # override default timeout
+    max_turns: 15                           # override default max turns
+    prompt_variables:                       # variables for prompt templating
+      VAR_NAME: ${ENV_VAR:-default}
+    request_variables: [dynamic_var]        # variables passed per-request
 ```
 
-Optional configuration:
-```bash
-# Model selection (defaults shown)
-ANTHROPIC_COORDINATOR_MODEL=claude-sonnet-4-5-20250929
-ANTHROPIC_COLLECTOR_MODEL=claude-3-5-haiku-20241022
+### Subagent Configuration
 
-# Cluster context for prompts
-WC_CLUSTER=my-workload-cluster
-ORG_NS=org-myorg
+```yaml
+subagents:
+  my-collector:
+    description: |
+      Detailed description of when to use this subagent.
+      This is shown to the coordinator to help it decide when to delegate.
+    system_prompt_file: prompts/collector_prompt.md
+    model: claude-3-5-haiku-20241022        # optional, uses default
+    mcp_servers: [server_a, server_b]       # MCP servers this subagent can access
+    timeout_seconds: 60                     # override default timeout
+    max_turns: 10                           # override default max turns
 ```
 
-### 3. Login to Kubernetes Clusters
+### MCP Server Configuration
 
-Use Teleport to create kubeconfigs:
+```yaml
+mcp_servers:
+  # Local command-based MCP server
+  local_server:
+    command: /path/to/mcp-server
+    args: ["--flag", "value"]
+    env:
+      API_KEY: ${API_KEY}
+    tools: [tool_a, tool_b, tool_c]
+    in_cluster_fallback: false              # use --in-cluster if env not set
 
-```bash
-# For separate management and workload clusters:
-make -f Makefile.local.mk local-kubeconfig MC=<management-cluster> WC=<workload-cluster>
-
-# Or use the same cluster for both:
-make -f Makefile.local.mk local-kubeconfig MC=<cluster-name>
+  # Remote HTTP MCP server
+  remote_server:
+    url: https://mcp-server.example.com
+    tools: [tool_x, tool_y]
 ```
 
-This creates:
-- `local_config/mc-kubeconfig.yaml` (management cluster)
-- `local_config/wc-kubeconfig.yaml` (workload cluster)
+### Environment Variable Expansion
 
-## Running Locally
+Configuration values support environment variable expansion:
 
-### Option A: Docker (Recommended - Matches Production)
-
-Build and run with Docker:
-
-```bash
-# Build the image
-make -f Makefile.local.mk docker-build
-
-# Run the container
-make -f Makefile.local.mk docker-run
-```
-
-The API will be available at `http://localhost:8000`
-
-### Option B: Native Python (Faster Iteration)
-
-Download the MCP Kubernetes binary:
-
-```bash
-make -f Makefile.local.mk local-mcp
-```
-
-Run with uvicorn (automatically creates virtualenv and installs dependencies):
-
-```bash
-make -f Makefile.local.mk local-run
-```
-
-The API will be available at `http://localhost:8000` with hot-reload enabled.
-
-## Testing the Setup
-
-### Health Check
-
-```bash
-# Basic health check
-curl http://localhost:8000/health
-
-# Deep check (validates configuration, kubeconfig, API key, MCP binary)
-curl http://localhost:8000/ready?deep=true
-```
-
-### Send a Query
-
-Using the convenience command:
-
-```bash
-# Default query (lists namespaces)
-make -f Makefile.local.mk local-query
-
-# Custom query
-make -f Makefile.local.mk local-query Q="Check pod status in kube-system"
-make -f Makefile.local.mk local-query Q="Investigate non-ready deployments"
-```
-
-Or using curl directly:
-
-```bash
-curl http://localhost:8000/ -d '{"query": "Investigate non-ready deployments"}'
-```
-
-### Streaming Response
-
-```bash
-curl -N http://localhost:8000/stream -d '{"query": "List all pods in default namespace"}'
+```yaml
+env:
+  SIMPLE: ${MY_VAR}              # Required variable
+  WITH_DEFAULT: ${MY_VAR:-fallback}  # With default value
 ```
 
 ## API Endpoints
 
-- `GET /health` - Basic health check
-- `GET /ready` - Readiness check (optional `?deep=true` for configuration validation)
-- `GET /schema` - Returns the DiagnosticReport JSON schema
-- `POST /` - Blocking query endpoint (returns complete response)
-- `POST /stream` - Streaming query endpoint (returns chunks as they're generated)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | POST | Run an agent investigation |
+| `/stream` | POST | Run with streaming response |
+| `/agents` | GET | List available agents |
+| `/agents/{name}/schema` | GET | Get agent's response schema |
+| `/health` | GET | Liveness probe |
+| `/ready` | GET | Readiness probe |
 
-### Request Format
+### Example Request
 
-```json
-{
-  "query": "Your diagnostic query here",
-  "timeout_seconds": 300,  // optional, default 300
-  "max_turns": 15          // optional, default 15
-}
+```bash
+curl -X POST http://localhost:8000/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "Why is the payment-service deployment not ready?",
+    "agent": "kubernetes-debugger",
+    "timeout_seconds": 300,
+    "variables": {
+      "dynamic_var": "custom_value"
+    }
+  }'
 ```
 
-### Response Format
+### Example Response
 
 ```json
 {
-  "result": "Diagnostic report text...",
-  "request_id": "uuid-here",
+  "result": "## Investigation Summary\n\n...",
+  "request_id": "550e8400-e29b-41d4-a716-446655440000",
+  "agent": "kubernetes-debugger",
   "metrics": {
-    "duration_ms": 12345,
+    "duration_ms": 45230,
     "num_turns": 8,
-    "total_cost_usd": 0.0245,
-    "usage": {
-      "input_tokens": 1234,
-      "output_tokens": 567,
-      "cache_creation_input_tokens": 0,
-      "cache_read_input_tokens": 890
-    },
-    "breakdown": {
-      "wc_collector": {
-        "usage": {"input_tokens": 500, "output_tokens": 200},
-        "total_cost_usd": 0.01,
-        "duration_ms": 3000
-      },
-      "mc_collector": {
-        "usage": {"input_tokens": 300, "output_tokens": 150},
-        "total_cost_usd": 0.008,
-        "duration_ms": 2000
-      }
-    }
+    "total_cost_usd": 0.0342,
+    "usage": { ... }
   }
 }
 ```
 
-The `metrics` object includes:
-- **duration_ms**: Total investigation time in milliseconds
-- **num_turns**: Number of agent conversation turns
-- **total_cost_usd**: Total cost of the API calls in USD (includes coordinator + all subagents)
-- **usage**: Overall token usage breakdown
-  - `input_tokens`: Tokens sent to the model
-  - `output_tokens`: Tokens generated by the model
-  - `cache_creation_input_tokens`: Tokens used to create prompt cache
-  - `cache_read_input_tokens`: Tokens read from prompt cache (cost savings)
-- **breakdown**: Per-agent cost and token breakdown (coordinator uses Task tool, collectors gather data)
-  - `wc_collector`: Workload cluster collector metrics
-  - `mc_collector`: Management cluster collector metrics
-  - Each agent shows its own usage, cost, and duration
+## Quick Start
 
-## Development Workflow
+1. **Install dependencies**
+   ```bash
+   uv sync
+   ```
+
+2. **Set environment variables**
+   ```bash
+   export ANTHROPIC_API_KEY="your-api-key"
+   export SHOOT_CONFIG="/path/to/shoot.yaml"
+   export KUBECONFIG="/path/to/kubeconfig"
+   ```
+
+3. **Run the server**
+   ```bash
+   uv run uvicorn src.main:app --reload --port 8000
+   ```
+
+4. **Send a query**
+   ```bash
+   curl -X POST http://localhost:8000/ \
+     -H "Content-Type: application/json" \
+     -d '{"query": "Check pod status", "agent": "kubernetes-debugger"}'
+   ```
+
+## Development
 
 ```bash
-# Install pre-commit hooks for code quality
-pre-commit install
+# Code formatting and linting
+uv run pre-commit run --all-files
 
-# Run code quality checks
-pre-commit run --all-files
+# Run tests
+uv run pytest
 
-# Individual checks
-black src/                    # Format code
-flake8 src/                   # Lint
-mypy src/                     # Type checking
-bandit -c .bandit src/        # Security scan
+# Type checking
+uv run mypy src/
 ```
 
-## Troubleshooting
+## Project Structure
 
-**"Claude Code not found" error:**
-- For native Python setup, download the MCP binary: `make -f Makefile.local.mk local-mcp`
-- Ensure `MCP_KUBERNETES_PATH` points to the correct binary location
+```
+shoot/
+├── config/
+│   ├── shoot.yaml              # Main configuration file
+│   ├── prompts/                # System prompts for agents
+│   │   ├── coordinator_prompt.md
+│   │   └── collector_prompt.md
+│   └── schemas/                # JSON schemas for responses
+│       └── diagnostic_report.json
+├── src/
+│   ├── main.py                 # FastAPI application
+│   ├── coordinator.py          # Orchestrator agent logic
+│   ├── collectors.py           # Subagent builders
+│   ├── config_schema.py        # Pydantic models for configuration
+│   └── config_loader.py        # YAML loading and validation
+└── tests/
+```
 
-**"model: claude-sonnet-4-5-20250514" not found:**
-- Update your model configuration to use valid model IDs (see `.env.example`)
-- Latest valid models: `claude-sonnet-4-5-20250929`, `claude-3-5-haiku-20241022`
+## License
 
-**Authentication errors:**
-- Verify your `ANTHROPIC_API_KEY` is valid
-- Refresh cluster kubeconfigs: `make -f Makefile.local.mk local-kubeconfig MC=<cluster>`
-
-For more detailed development guidance, see [CLAUDE.md](CLAUDE.md).
+See [LICENSE](LICENSE) for details.

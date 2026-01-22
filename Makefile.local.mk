@@ -112,6 +112,10 @@ local-deps: ## Create .venv and install/sync dependencies
 	@echo "Installing dependencies..."
 	@uv pip install -r requirements.txt
 
+.PHONY: format
+format: ## Run all pre-commit hooks on all files
+	uv run pre-commit run --all-files
+
 .PHONY: local-run
 local-run: local-deps ## Run locally with uvicorn. Usage: make -f Makefile.local.mk local-run [DEFAULT_CONFIG=1]
 	@if [ ! -f $(LOCAL_CONFIG_DIR)/.env ]; then \
@@ -170,11 +174,3 @@ local-query: ## Send a test query to the local server. Usage: make -f Makefile.l
 		jq -r '.metrics.breakdown | to_entries[] | "  \(.key):\n    Cost: $$\(.value.total_cost_usd // 0)\n    Input: \(.value.usage.input_tokens // 0), Output: \(.value.usage.output_tokens // 0)"' $$tmpfile; \
 	fi; \
 	rm -f $$tmpfile
-
-.PHONY: local-assistants
-local-assistants: ## List available assistants from the local server
-	@curl -s http://localhost:8000/assistants | jq '.'
-
-.PHONY: local-ready
-local-ready: ## Check if the local server is ready (with deep checks)
-	@curl -s "http://localhost:8000/ready?deep=true" | jq '.'

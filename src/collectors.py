@@ -64,31 +64,31 @@ def build_mcp_config_from_schema(
 
 def build_mcp_servers_from_config(
     config: ShootConfig,
-    assistant_name: str,
+    agent_name: str,
 ) -> dict[str, dict[str, Any]]:
     """
-    Build MCP server configurations for an assistant from config.
+    Build MCP server configurations for an agent from config.
 
-    Includes MCP servers used by the assistant directly and by its subagents.
+    Includes MCP servers used by the agent directly and by its subagents.
 
     Args:
         config: ShootConfig object
-        assistant_name: Name of the assistant
+        agent_name: Name of the agent
 
     Returns:
         Dict of MCP server name -> configuration
     """
-    assistant = config.get_assistant(assistant_name)
+    agent = config.get_agent(agent_name)
     mcp_servers: dict[str, dict[str, Any]] = {}
 
-    # Collect MCP servers used directly by the assistant
-    for mcp_name in assistant.mcp_servers:
+    # Collect MCP servers used directly by the agent
+    for mcp_name in agent.mcp_servers:
         if mcp_name not in mcp_servers:
             mcp_config = config.get_mcp_server(mcp_name)
             mcp_servers[mcp_name] = build_mcp_config_from_schema(mcp_config)
 
-    # Collect MCP servers used by the assistant's subagents
-    for subagent_name in assistant.subagents:
+    # Collect MCP servers used by the agent's subagents
+    for subagent_name in agent.subagents:
         subagent = config.get_subagent(subagent_name)
         for mcp_name in subagent.mcp_servers:
             if mcp_name not in mcp_servers:
@@ -124,26 +124,26 @@ def get_tools_for_subagent(
     return tools
 
 
-def get_tools_for_assistant(
+def get_tools_for_agent(
     config: ShootConfig,
-    assistant_name: str,
+    agent_name: str,
 ) -> list[str]:
     """
-    Get the list of MCP tool names an assistant can access directly.
+    Get the list of MCP tool names an agent can access directly.
 
     Args:
         config: ShootConfig object
-        assistant_name: Name of the assistant
+        agent_name: Name of the agent
 
     Returns:
         List of tool names (e.g., ["mcp__kubernetes_wc__get", ...])
     """
     from config_schema import get_tools_for_mcp
 
-    assistant = config.get_assistant(assistant_name)
+    agent = config.get_agent(agent_name)
     tools: list[str] = []
 
-    for mcp_name in assistant.mcp_servers:
+    for mcp_name in agent.mcp_servers:
         mcp_config = config.get_mcp_server(mcp_name)
         tools.extend(get_tools_for_mcp(mcp_name, mcp_config.tools))
 
@@ -152,15 +152,15 @@ def get_tools_for_assistant(
 
 def build_agent_definitions_from_config(
     config: ShootConfig,
-    assistant_name: str,
+    agent_name: str,
     config_base_dir: Path,
 ) -> dict[str, AgentDefinition]:
     """
-    Build AgentDefinitions for an assistant's subagents from config.
+    Build AgentDefinitions for an agent's subagents from config.
 
     Args:
         config: ShootConfig object
-        assistant_name: Name of the assistant
+        agent_name: Name of the agent
         config_base_dir: Base directory for resolving prompt file paths
 
     Returns:
@@ -168,10 +168,10 @@ def build_agent_definitions_from_config(
     """
     from config_loader import get_prompt_with_variables
 
-    assistant = config.get_assistant(assistant_name)
+    agent = config.get_agent(agent_name)
     agents: dict[str, AgentDefinition] = {}
 
-    for subagent_name in assistant.subagents:
+    for subagent_name in agent.subagents:
         subagent = config.get_subagent(subagent_name)
 
         # Load and process the prompt

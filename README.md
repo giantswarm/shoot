@@ -168,8 +168,9 @@ subagents:
     system_prompt_file: prompts/collector_prompt.md
     model: claude-3-5-haiku-20241022        # optional, uses default
     mcp_servers: [server_a, server_b]       # MCP servers this subagent can access
-    timeout_seconds: 60                     # override default timeout
-    max_turns: 10                           # override default max turns
+    allowed_tools: [server_a, server_b_list]
+    prompt_variables:                       # variables for prompt templating
+      VAR_NAME: ${ENV_VAR:-default}
 ```
 
 ### MCP Server Configuration
@@ -182,8 +183,7 @@ mcp_servers:
     args: ["--flag", "value"]
     env:
       API_KEY: ${API_KEY}
-    tools: [tool_a, tool_b, tool_c]
-    in_cluster_fallback: false              # use --in-cluster if env not set
+    tools: [tool_a, tool_b, tool_c]      # use --in-cluster if env not set
 
   # Remote HTTP MCP server
   remote_server:

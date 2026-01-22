@@ -53,11 +53,6 @@ def build_mcp_config_from_schema(
     env = {k: v for k, v in mcp_config.env.items() if v}
     if env:
         config["env"] = env
-    elif mcp_config.in_cluster_fallback:
-        # No env vars set but in_cluster_fallback is True
-        # Add --in-cluster to args if not already present
-        if "--in-cluster" not in config["args"]:
-            config["args"].append("--in-cluster")
 
     return config
 
@@ -105,6 +100,9 @@ def get_tools_for_subagent(
     """
     Get the list of tool names a subagent can access.
 
+    If the subagent has allowed_tools configured, only those tools are returned.
+    Otherwise, all tools from the subagent's MCP servers are returned.
+
     Args:
         config: ShootConfig object
         subagent_name: Name of the subagent
@@ -120,6 +118,10 @@ def get_tools_for_subagent(
     for mcp_name in subagent.mcp_servers:
         mcp_config = config.get_mcp_server(mcp_name)
         tools.extend(get_tools_for_mcp(mcp_name, mcp_config.tools))
+
+    # Filter by allowed_tools if specified
+    if subagent.allowed_tools:
+        tools = [t for t in tools if t in subagent.allowed_tools]
 
     return tools
 
@@ -174,12 +176,12 @@ def build_agent_definitions_from_config(
     for subagent_name in agent.subagents:
         subagent = config.get_subagent(subagent_name)
 
-        # Load and process the prompt
+        # Load and process the prompt with subagent's prompt_variables
         prompt = get_prompt_with_variables(
             config=config,
             base_dir=config_base_dir,
             prompt_file=subagent.system_prompt_file,
-            variables={},  # Subagents don't have prompt variables currently
+            variables=dict(subagent.prompt_variables),
         )
 
         # Get the tools this subagent can access

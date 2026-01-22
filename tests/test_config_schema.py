@@ -55,7 +55,6 @@ class TestMCPServerConfig:
         assert config.args == []
         assert config.env == {}
         assert config.tools == []
-        assert config.in_cluster_fallback is False
 
     def test_full_config(self) -> None:
         config = MCPServerConfig(
@@ -63,13 +62,11 @@ class TestMCPServerConfig:
             args=["serve", "--non-destructive"],
             env={"KUBECONFIG": "/path/to/config"},
             tools=["get", "list", "describe"],
-            in_cluster_fallback=True,
         )
         assert config.command == "/usr/bin/mcp"
         assert config.args == ["serve", "--non-destructive"]
         assert config.env == {"KUBECONFIG": "/path/to/config"}
         assert config.tools == ["get", "list", "describe"]
-        assert config.in_cluster_fallback is True
 
 
 class TestSubagentConfig:
@@ -84,8 +81,10 @@ class TestSubagentConfig:
         assert config.system_prompt_file == "prompts/test.md"
         assert config.model == ""
         assert config.mcp_servers == []
-        assert config.timeout_seconds == 0
-        assert config.max_turns == 0
+        assert config.allowed_tools == []
+        assert config.prompt_variables == {}
+        assert config.request_variables == []
+        assert config.response_schema == ""
 
     def test_full_config(self) -> None:
         config = SubagentConfig(
@@ -93,12 +92,19 @@ class TestSubagentConfig:
             system_prompt_file="prompts/test.md",
             model="claude-3-5-haiku-20241022",
             mcp_servers=["kubernetes_wc"],
-            timeout_seconds=60,
-            max_turns=10,
+            allowed_tools=["mcp__kubernetes_wc__get", "mcp__kubernetes_wc__list"],
+            prompt_variables={"CLUSTER_NAME": "test-cluster"},
+            request_variables=["namespace"],
+            response_schema="diagnostic_report",
         )
         assert config.mcp_servers == ["kubernetes_wc"]
-        assert config.timeout_seconds == 60
-        assert config.max_turns == 10
+        assert config.allowed_tools == [
+            "mcp__kubernetes_wc__get",
+            "mcp__kubernetes_wc__list",
+        ]
+        assert config.prompt_variables == {"CLUSTER_NAME": "test-cluster"}
+        assert config.request_variables == ["namespace"]
+        assert config.response_schema == "diagnostic_report"
 
 
 class TestAgentConfig:

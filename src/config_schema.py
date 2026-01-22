@@ -167,17 +167,21 @@ class SubagentConfig(BaseModel):
         default_factory=list,
         description="List of MCP server names this subagent can access",
     )
-    timeout_seconds: int = Field(
-        default=0,
-        ge=0,
-        le=600,
-        description="Timeout in seconds (0 = use defaults.timeouts.subagent)",
+    allowed_tools: list[str] = Field(
+        default_factory=list,
+        description="Tools the subagent can use (empty = all tools from mcp_servers)",
     )
-    max_turns: int = Field(
-        default=0,
-        ge=0,
-        le=50,
-        description="Max turns (0 = use defaults.max_turns.subagent)",
+    prompt_variables: dict[str, str] = Field(
+        default_factory=dict,
+        description="Variables to substitute in system prompt (supports ${VAR})",
+    )
+    request_variables: list[str] = Field(
+        default_factory=list,
+        description="Variables that can be passed from parent agent for prompt injection",
+    )
+    response_schema: str = Field(
+        default="",
+        description="Name of response schema to use (from response_schemas)",
     )
 
 
@@ -388,6 +392,15 @@ def validate_config_references(config: ShootConfig) -> list[str]:
                 errors.append(
                     f"Subagent '{subagent_name}' references unknown mcp_server '{mcp_name}'"
                 )
+
+        # Check response schema reference
+        if (
+            subagent.response_schema
+            and subagent.response_schema not in config.response_schemas
+        ):
+            errors.append(
+                f"Subagent '{subagent_name}' references unknown response_schema '{subagent.response_schema}'"
+            )
 
     return errors
 

@@ -5,10 +5,14 @@ This FastAPI service provides an HTTP interface to the Shoot multi-agent
 Kubernetes debugging system.
 
 Architecture:
-- Coordinator agent (Claude Sonnet) orchestrates investigation
-- WC Collector subagent gathers workload cluster data
-- MC Collector subagent gathers management cluster data
-- Strict separation: each collector only accesses its own cluster
+- Agent (Claude Sonnet) orchestrates investigation
+- Subagents gather data from configured MCP servers
+- Strict separation: each subagent only accesses its own MCP servers
+
+Configuration:
+- Set SHOOT_CONFIG to point to the configuration file (required)
+- Different agents for different use cases (debugging, alerts, E2E tests)
+- Each agent has its own prompts, subagents, and response schema
 """
 
 import asyncio
@@ -22,12 +26,19 @@ from fastapi.responses import StreamingResponse
 from app_logging import logger
 from collectors import get_mcp_configs_valid, run_preflight_checks
 from config import get_settings
+from config_loader import get_config, get_config_base_dir
+from config_schema import ResponseFormat
 from coordinator import (
     run_coordinator,
     run_coordinator_streaming,
     is_coordinator_ready,
     get_structured_report,
     InvestigationResult,
+)
+from response_formatter import (
+    get_schema_for_agent,
+    parse_structured_response,
+    validate_response,
 )
 from schemas import DIAGNOSTIC_REPORT_SCHEMA
 from telemetry import get_tracer, trace_operation
@@ -42,7 +53,7 @@ request_id_ctx: ContextVar[str] = ContextVar("request_id", default="")
 app = FastAPI(
     title="Shoot API",
     description="A Kubernetes debugging agent powered by Claude",
-    version="2.12.0",
+    version="3.1.0",
 )
 
 
@@ -64,11 +75,22 @@ async def ready(deep: bool = False) -> dict[str, Any]:
     wc_valid, mc_valid = get_mcp_configs_valid()
     coordinator_ready = is_coordinator_ready()
 
-    checks = {
+    config = get_config()
+    if config is None:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "not_ready",
+                "error": "SHOOT_CONFIG not set - configuration file is required",
+            },
+        )
+
+    checks: dict[str, Any] = {
         "status": "ready",
         "kubernetes_wc": wc_valid,
         "kubernetes_mc": mc_valid,
         "coordinator": coordinator_ready,
+        "agents": list(config.agents.keys()),
     }
 
     # Deep check: validate actual cluster connectivity
@@ -91,52 +113,173 @@ async def ready(deep: bool = False) -> dict[str, Any]:
     return checks
 
 
+@app.get("/agents")
+async def list_agents() -> dict[str, Any]:
+    """
+    List available agents and their configurations.
+
+    Returns:
+        Dictionary with agent names and their descriptions
+    """
+    config = get_config()
+    if config is None:
+        raise HTTPException(
+            status_code=503,
+            detail="SHOOT_CONFIG not set - configuration file is required",
+        )
+
+    agents: dict[str, Any] = {}
+    for name, agent in config.agents.items():
+        agents[name] = {
+            "description": agent.description,
+            "subagents": agent.subagents,
+            "response_schema": agent.response_schema or None,
+            "request_variables": agent.request_variables,
+        }
+
+    return {"agents": agents}
+
+
+@app.get("/agents/{agent_name}/schema")
+async def get_agent_schema(agent_name: str) -> dict[str, Any]:
+    """
+    Get the JSON Schema for an agent's response format.
+
+    Args:
+        agent_name: Name of the agent
+
+    Returns:
+        JSON Schema for the agent's response format
+    """
+    config = get_config()
+    if config is None:
+        raise HTTPException(
+            status_code=503,
+            detail="SHOOT_CONFIG not set - configuration file is required",
+        )
+
+    if agent_name not in config.agents:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Agent '{agent_name}' not found. "
+            f"Available: {list(config.agents.keys())}",
+        )
+
+    config_base_dir = get_config_base_dir()
+    if config_base_dir is None:
+        raise HTTPException(status_code=500, detail="Config base directory not found")
+
+    schema, schema_config = get_schema_for_agent(config, agent_name, config_base_dir)
+
+    if schema is None:
+        return {
+            "agent": agent_name,
+            "schema": None,
+            "message": "No response schema configured for this agent",
+        }
+
+    return {
+        "agent": agent_name,
+        "schema": schema,
+        "format": schema_config.format.value if schema_config else "human",
+        "description": schema_config.description if schema_config else "",
+    }
+
+
+def _validate_agent(agent_name: str | None) -> None:
+    """Validate that agent name is provided and exists in config."""
+    if not agent_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Agent name is required. Use /agents to list available agents.",
+        )
+
+    config = get_config()
+    if config is None:
+        raise HTTPException(
+            status_code=503,
+            detail="SHOOT_CONFIG not set - configuration file is required",
+        )
+    if agent_name not in config.agents:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Agent '{agent_name}' not found. "
+            f"Available: {list(config.agents.keys())}",
+        )
+
+
+def _get_response_schema_info(
+    agent_name: str | None,
+) -> tuple[ResponseFormat, dict[str, Any] | None]:
+    """Get response format and schema for an agent."""
+    config = get_config()
+    if config is None or not agent_name:
+        return ResponseFormat.HUMAN, None
+
+    config_base_dir = get_config_base_dir()
+    if not config_base_dir:
+        return ResponseFormat.HUMAN, None
+
+    schema, schema_config = get_schema_for_agent(config, agent_name, config_base_dir)
+    response_format = schema_config.format if schema_config else ResponseFormat.HUMAN
+    return response_format, schema
+
+
+def _add_structured_output(
+    response: dict[str, Any],
+    result_text: str,
+    response_format: ResponseFormat,
+    schema: dict[str, Any] | None,
+    want_structured: bool,
+) -> None:
+    """Add structured output to response if applicable."""
+    if response_format == ResponseFormat.JSON:
+        parsed = parse_structured_response(result_text, schema)
+        if parsed:
+            if schema:
+                is_valid, errors = validate_response(parsed, schema)
+                if not is_valid:
+                    logger.warning(f"Response validation errors: {errors}")
+            response["structured"] = parsed
+    elif want_structured:
+        structured = get_structured_report(result_text)
+        if structured:
+            response["structured"] = structured.model_dump()
+
+
 @app.post("/")
-async def run(request: Request) -> dict[str, Any]:
+async def run(request: Request) -> Any:
     """
     Run the Shoot agent to investigate a Kubernetes issue.
 
     Request body:
         {
             "query": "Description of the issue, e.g., 'Deployment not ready'",
+            "agent": "kubernetes_debugger",  // required, agent name
             "timeout_seconds": 300,  // optional, default 300
             "max_turns": 15,         // optional, default 15
-            "structured": false      // optional, return structured JSON if parseable
+            "structured": false,     // optional, return structured JSON if parseable
+            "variables": {}          // optional, request variables for prompt injection
         }
 
     Returns:
         {
             "result": "Diagnostic report with findings and recommendations",
             "request_id": "uuid",
+            "agent": "kubernetes_debugger",
             "metrics": {
                 "duration_ms": 12345,
                 "num_turns": 8,
                 "total_cost_usd": 0.0245,
-                "usage": {
-                    "input_tokens": 1234,
-                    "output_tokens": 567,
-                    "cache_creation_input_tokens": 0,
-                    "cache_read_input_tokens": 890
-                },
-                "breakdown": {
-                    "wc_collector": {
-                        "usage": {"input_tokens": 500, "output_tokens": 200},
-                        "total_cost_usd": 0.01,
-                        "duration_ms": 3000
-                    },
-                    "mc_collector": {
-                        "usage": {"input_tokens": 300, "output_tokens": 150},
-                        "total_cost_usd": 0.008,
-                        "duration_ms": 2000
-                    }
-                }
+                "usage": {...}
             }
         }
 
         If structured=true and output is parseable:
         {"result": "...", "structured": {...}, "metrics": {...}, "request_id": "uuid"}
+
+        For JSON-format agents, returns raw JSON response.
     """
-    # Generate request ID for tracking
     request_id = str(uuid.uuid4())
     request_id_ctx.set(request_id)
     settings = get_settings()
@@ -150,27 +293,33 @@ async def run(request: Request) -> dict[str, Any]:
             if not query:
                 raise HTTPException(status_code=400, detail="Query is required")
 
-            # Optional parameters with defaults from config
+            agent_name = data.get("agent")
+            _validate_agent(agent_name)
+
             timeout_seconds = data.get("timeout_seconds") or settings.timeout_seconds
             max_turns = data.get("max_turns")
             want_structured = data.get("structured", False)
+            request_variables = data.get("variables", {})
 
             span.set_attribute("query_length", len(query))
             span.set_attribute("timeout_seconds", timeout_seconds)
+            span.set_attribute("agent", agent_name or "default")
 
             logger.info(
-                f"Starting investigation request_id={request_id} "
+                f"Starting request_id={request_id} "
+                f"agent={agent_name or 'default'} "
                 f"query_length={len(query)} timeout={timeout_seconds}s"
             )
 
-            # HTTP-level timeout with buffer for graceful shutdown
             http_timeout = timeout_seconds + 30
             try:
                 async with asyncio.timeout(http_timeout):
                     investigation_result: InvestigationResult = await run_coordinator(
                         query,
+                        agent_name=agent_name,
                         timeout_seconds=timeout_seconds,
                         max_turns=max_turns,
+                        request_variables=request_variables,
                     )
             except asyncio.TimeoutError:
                 logger.error(f"Investigation timed out request_id={request_id}")
@@ -185,10 +334,11 @@ async def run(request: Request) -> dict[str, Any]:
                     },
                 )
 
-            # Build response with result and metrics
+            response_format, schema = _get_response_schema_info(agent_name)
             response: dict[str, Any] = {
                 "result": investigation_result["result"],
                 "request_id": request_id,
+                "agent": agent_name,
                 "metrics": {
                     "duration_ms": investigation_result["duration_ms"],
                     "num_turns": investigation_result["num_turns"],
@@ -198,11 +348,13 @@ async def run(request: Request) -> dict[str, Any]:
                 },
             }
 
-            # Optionally include structured output
-            if want_structured:
-                structured = get_structured_report(investigation_result["result"])
-                if structured:
-                    response["structured"] = structured.model_dump()
+            _add_structured_output(
+                response,
+                investigation_result["result"],
+                response_format,
+                schema,
+                want_structured,
+            )
 
             logger.info(f"Investigation completed request_id={request_id}")
             return response
@@ -229,8 +381,10 @@ async def run_stream(request: Request) -> StreamingResponse:
     Request body:
         {
             "query": "Description of the issue, e.g., 'Deployment not ready'",
+            "agent": "kubernetes_debugger",  // required, agent name
             "timeout_seconds": 300,  // optional, default 300
-            "max_turns": 15          // optional, default 15
+            "max_turns": 15,         // optional, default 15
+            "variables": {}          // optional, request variables
         }
 
     Returns:
@@ -247,11 +401,16 @@ async def run_stream(request: Request) -> StreamingResponse:
         if not query:
             raise HTTPException(status_code=400, detail="Query is required")
 
+        agent_name = data.get("agent")
+        _validate_agent(agent_name)
+
         timeout_seconds = data.get("timeout_seconds") or settings.timeout_seconds
         max_turns = data.get("max_turns")
+        request_variables = data.get("variables", {})
 
         logger.info(
             f"Starting streaming investigation request_id={request_id} "
+            f"agent={agent_name} "
             f"query_length={len(query)} timeout={timeout_seconds}s"
         )
 
@@ -259,8 +418,10 @@ async def run_stream(request: Request) -> StreamingResponse:
             try:
                 async for chunk in run_coordinator_streaming(
                     query,
+                    agent_name=agent_name,
                     timeout_seconds=timeout_seconds,
                     max_turns=max_turns,
+                    request_variables=request_variables,
                 ):
                     yield chunk
                 logger.info(
@@ -298,5 +459,7 @@ async def get_schema() -> dict[str, Any]:
 
     This schema describes the expected output format when the coordinator
     successfully generates a structured diagnostic report.
+
+    Note: Use /agents/{name}/schema for agent-specific schemas.
     """
     return DIAGNOSTIC_REPORT_SCHEMA

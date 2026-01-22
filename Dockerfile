@@ -1,4 +1,4 @@
-# Use Python 3.13 slim image as base
+# Use Python 3.14 slim image as base
 FROM python:3.14-slim
 
 # Install Node.js and bash (required for npx and MCP servers)
@@ -18,9 +18,9 @@ RUN npm install -g @anthropic-ai/claude-code
 RUN curl -L https://github.com/giantswarm/mcp-kubernetes/releases/download/v0.0.122/mcp-kubernetes_linux_amd64 -o /usr/local/bin/mcp-kubernetes \
     && chmod +x /usr/local/bin/mcp-kubernetes
 
-# Create home directory for non-root user (UID 1000)
+# Create non-root user for running the application
 # Claude Code CLI needs a writable home directory for .claude.json
-RUN mkdir -p /home/app && chown 1000:1000 /home/app
+RUN useradd -m -u 1000 -s /bin/bash app
 
 # Set working directory
 WORKDIR /app
@@ -33,6 +33,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
 COPY src/ .
+
+# Change ownership of app directory to non-root user
+RUN chown -R app:app /app
+
+# Switch to non-root user
+USER app
+ENV HOME=/home/app
 
 # Run the application
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

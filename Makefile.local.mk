@@ -4,6 +4,9 @@ IMAGE_NAME ?= shoot
 IMAGE_TAG ?= local
 LOCAL_CONFIG_DIR ?= local_config
 
+# Helper for optional JSON fields in curl commands
+comma := ,
+
 .PHONY: docker-build
 docker-build: ## Build Docker image locally
 	docker build -t $(IMAGE_NAME):$(IMAGE_TAG) .
@@ -11,28 +14,51 @@ docker-build: ## Build Docker image locally
 .PHONY: docker-run
 docker-run: ## Run Docker container with local kubeconfigs
 	@if [ ! -f $(LOCAL_CONFIG_DIR)/.env ]; then \
-		echo "Error: $(LOCAL_CONFIG_DIR)/.env not found. Copy .env.example to $(LOCAL_CONFIG_DIR)/.env and configure it."; \
+		echo "Error: $(LOCAL_CONFIG_DIR)/.env not found. Run 'make -f Makefile.local.mk local-setup' first."; \
+		exit 1; \
+	fi
+	@if [ ! -f $(LOCAL_CONFIG_DIR)/shoot.yaml ]; then \
+		echo "Error: $(LOCAL_CONFIG_DIR)/shoot.yaml not found. Run 'make -f Makefile.local.mk local-setup' first."; \
 		exit 1; \
 	fi
 	docker run --rm -it \
 		--env-file $(LOCAL_CONFIG_DIR)/.env \
 		-v $(PWD)/$(LOCAL_CONFIG_DIR)/wc-kubeconfig.yaml:/k8s/wc-kubeconfig.yaml:ro \
 		-v $(PWD)/$(LOCAL_CONFIG_DIR)/mc-kubeconfig.yaml:/k8s/mc-kubeconfig.yaml:ro \
+		-v $(PWD)/$(LOCAL_CONFIG_DIR):/app/config:ro \
+		-v $(PWD)/config/prompts:/app/config/prompts:ro \
 		-e KUBECONFIG=/k8s/wc-kubeconfig.yaml \
 		-e MC_KUBECONFIG=/k8s/mc-kubeconfig.yaml \
+		-e SHOOT_CONFIG=/app/config/shoot.yaml \
 		-p 8000:8000 \
 		$(IMAGE_NAME):$(IMAGE_TAG)
 
 .PHONY: local-setup
 local-setup: ## Create local_config directory with templates
-	@mkdir -p $(LOCAL_CONFIG_DIR)
+	@mkdir -p $(LOCAL_CONFIG_DIR)/schemas $(LOCAL_CONFIG_DIR)/prompts
 	@if [ ! -f $(LOCAL_CONFIG_DIR)/.env ]; then \
 		cp .env.example $(LOCAL_CONFIG_DIR)/.env; \
 		echo "Created $(LOCAL_CONFIG_DIR)/.env - edit with your ANTHROPIC_API_KEY"; \
 	fi
-	@echo "Place your kubeconfigs in $(LOCAL_CONFIG_DIR)/:"
-	@echo "  - wc-kubeconfig.yaml (workload cluster)"
-	@echo "  - mc-kubeconfig.yaml (management cluster)"
+	@if [ ! -f $(LOCAL_CONFIG_DIR)/shoot.yaml ]; then \
+		cp config/shoot.yaml $(LOCAL_CONFIG_DIR)/shoot.yaml; \
+		echo "Created $(LOCAL_CONFIG_DIR)/shoot.yaml - customize as needed"; \
+	fi
+	@if [ ! -f $(LOCAL_CONFIG_DIR)/schemas/diagnostic_report.json ]; then \
+		cp config/schemas/diagnostic_report.json $(LOCAL_CONFIG_DIR)/schemas/; \
+		echo "Created $(LOCAL_CONFIG_DIR)/schemas/diagnostic_report.json"; \
+	fi
+	@if [ ! -f $(LOCAL_CONFIG_DIR)/prompts/coordinator_prompt.md ]; then \
+		cp -R config/prompts/* $(LOCAL_CONFIG_DIR)/prompts/; \
+		echo "Created $(LOCAL_CONFIG_DIR)/prompts/*.md - customize as needed"; \
+	fi
+	@echo ""
+	@echo "Setup instructions:"
+	@echo "  1. Edit $(LOCAL_CONFIG_DIR)/.env with your ANTHROPIC_API_KEY"
+	@echo "  2. Place your kubeconfigs in $(LOCAL_CONFIG_DIR)/:"
+	@echo "     - wc-kubeconfig.yaml (workload cluster)"
+	@echo "     - mc-kubeconfig.yaml (management cluster)"
+	@echo "  3. Customize $(LOCAL_CONFIG_DIR)/shoot.yaml and prompts as needed"
 
 .PHONY: local-kubeconfig
 local-kubeconfig: ## Login to clusters via tsh and create kubeconfigs. Usage: make -f Makefile.local.mk local-kubeconfig MC=<cluster> [WC=<cluster>]
@@ -86,8 +112,12 @@ local-deps: ## Create .venv and install/sync dependencies
 	@echo "Installing dependencies..."
 	@uv pip install -r requirements.txt
 
+.PHONY: format
+format: ## Run all pre-commit hooks on all files
+	uv run pre-commit run --all-files
+
 .PHONY: local-run
-local-run: local-deps ## Run locally with uvicorn using local_config/.env and kubeconfigs
+local-run: local-deps ## Run locally with uvicorn. Usage: make -f Makefile.local.mk local-run [DEFAULT_CONFIG=1]
 	@if [ ! -f $(LOCAL_CONFIG_DIR)/.env ]; then \
 		echo "Error: $(LOCAL_CONFIG_DIR)/.env not found. Run 'make -f Makefile.local.mk local-setup' first."; \
 		exit 1; \
@@ -96,25 +126,37 @@ local-run: local-deps ## Run locally with uvicorn using local_config/.env and ku
 		echo "Error: $(LOCAL_CONFIG_DIR)/wc-kubeconfig.yaml not found. Run 'make -f Makefile.local.mk local-kubeconfig MC=<cluster>' first."; \
 		exit 1; \
 	fi
-	@set -a && . $(LOCAL_CONFIG_DIR)/.env && set +a && \
+	@if [ -z "$(DEFAULT_CONFIG)" ]; then \
+		if [ ! -f $(LOCAL_CONFIG_DIR)/shoot.yaml ]; then \
+			echo "Error: $(LOCAL_CONFIG_DIR)/shoot.yaml not found. Run 'make -f Makefile.local.mk local-setup' first."; \
+			exit 1; \
+		fi; \
+		CONFIG_PATH=$(PWD)/$(LOCAL_CONFIG_DIR)/shoot.yaml; \
+	else \
+		CONFIG_PATH=$(PWD)/config/shoot.yaml; \
+		echo "Using default config: $$CONFIG_PATH"; \
+	fi && \
+	set -a && . $(LOCAL_CONFIG_DIR)/.env && set +a && \
 		KUBECONFIG=$(PWD)/$(LOCAL_CONFIG_DIR)/wc-kubeconfig.yaml \
 		MC_KUBECONFIG=$(PWD)/$(LOCAL_CONFIG_DIR)/mc-kubeconfig.yaml \
 		MCP_KUBERNETES_PATH=$${MCP_KUBERNETES_PATH:-$(PWD)/$(LOCAL_CONFIG_DIR)/mcp-kubernetes} \
+		SHOOT_CONFIG=$$CONFIG_PATH \
 		PYTHONPATH=$(PWD)/src \
-		uv run uvicorn src.main:app --reload --port 8000
+		uv run uvicorn src.main:app --reload --port 8000 --log-level debug
 
 .PHONY: local-query
-local-query: ## Send a test query to the local server. Usage: make -f Makefile.local.mk local-query [Q="your query"]
+local-query: ## Send a test query to the local server. Usage: make -f Makefile.local.mk local-query [Q="your query"] [A="assistant_name"]
 	@tmpfile=$$(mktemp); \
 	curl -s http://localhost:8000/ \
 		-H "Content-Type: application/json" \
-		-d '{"query": "$(if $(Q),$(Q),List all namespaces in the workload cluster)"}' \
+		-d '{"query": "$(if $(Q),$(Q),List all namespaces in the workload cluster)", "agent": "$(if $(A),$(A),kubernetes_debugger)"}' \
 		> $$tmpfile; \
 	jq -r '.result' $$tmpfile; \
 	echo; \
 	echo "================================================================================"; \
 	echo "METRICS"; \
 	echo "================================================================================"; \
+	jq -r '"Assistant: \(.assistant)"' $$tmpfile; \
 	jq -r '"Duration: \(.metrics.duration_ms / 1000)s"' $$tmpfile; \
 	jq -r '"Turns: \(.metrics.num_turns)"' $$tmpfile; \
 	jq -r '"Cost: $$\(.metrics.total_cost_usd)"' $$tmpfile; \
@@ -132,3 +174,9 @@ local-query: ## Send a test query to the local server. Usage: make -f Makefile.l
 		jq -r '.metrics.breakdown | to_entries[] | "  \(.key):\n    Cost: $$\(.value.total_cost_usd // 0)\n    Input: \(.value.usage.input_tokens // 0), Output: \(.value.usage.output_tokens // 0)"' $$tmpfile; \
 	fi; \
 	rm -f $$tmpfile
+
+.PHONY: local-query-stream
+local-query-stream: ## Send a streaming query to the local server. Usage: make -f Makefile.local.mk local-query-stream [Q="your query"] [A="assistant_name"]
+	@curl -sN http://localhost:8000/stream \
+		-H "Content-Type: application/json" \
+		-d '{"query": "$(if $(Q),$(Q),List all namespaces in the workload cluster)", "agent": "$(if $(A),$(A),kubernetes_debugger)"}'

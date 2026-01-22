@@ -2,7 +2,7 @@
 OpenTelemetry instrumentation for the Shoot agent system.
 
 This module configures distributed tracing for:
-- Coordinator agent operations
+- Agent operations
 - Collector subagent delegations
 - MCP tool calls
 - API request handling

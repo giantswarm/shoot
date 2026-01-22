@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `mcp_servers` field in `AgentConfig` allows orchestrators to access MCP servers directly, not just via subagent delegation
+- `url` field in `MCPServerConfig` enables HTTP remote MCP servers as an alternative to local command-based servers
+
+### Changed
+
+- **BREAKING**: Renamed "assistant" terminology to "agent" throughout the codebase for consistency:
+  - `AssistantConfig` class renamed to `AgentConfig`
+  - `config.assistants` field renamed to `config.agents`
+  - `get_assistant()` method renamed to `get_agent()`
+  - API endpoint `/assistants` renamed to `/agents`
+  - API endpoint `/assistants/{name}/schema` renamed to `/agents/{name}/schema`
+  - Request body field `"assistant"` renamed to `"agent"`
+  - Response field `"assistant"` renamed to `"agent"`
+  - YAML config key `assistants:` renamed to `agents:`
+
 ## [3.0.0] - 2026-01-20
 
 ### Added

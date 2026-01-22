@@ -1,5 +1,5 @@
 """
-Coordinator agent for the multi-agent Kubernetes debugging system.
+Agent for the multi-agent Kubernetes debugging system.
 
 This module implements the coordinator following the pattern from:
 https://github.com/anthropics/claude-agent-sdk-demos/blob/main/research-agent/
@@ -14,6 +14,7 @@ IMPORTANT: The coordinator has NO direct MCP/Kubernetes access.
 It can only delegate to collectors via allowed_tools=["Task"].
 """
 
+from pathlib import Path
 from typing import Any, AsyncGenerator, TypedDict
 
 from claude_agent_sdk import (
@@ -28,11 +29,13 @@ from claude_agent_sdk import (
 
 from app_logging import logger
 from collectors import (
-    get_wc_mcp_config,
-    get_mc_mcp_config,
-    create_agent_definitions,
+    build_mcp_servers_from_config,
+    build_agent_definitions_from_config,
+    get_tools_for_agent,
 )
-from config import get_settings, get_coordinator_prompt
+from config import get_settings
+from config_schema import ShootConfig
+from config_loader import get_config, get_config_base_dir, get_prompt_with_variables
 from telemetry import trace_operation, add_event, set_span_attribute
 from schemas import parse_markdown_report, DiagnosticReport
 
@@ -48,62 +51,142 @@ class InvestigationResult(TypedDict):
     breakdown: dict[str, dict[str, Any]] | None
 
 
-def create_coordinator_options(
+def create_coordinator_options_from_config(
+    config: ShootConfig,
+    agent_name: str,
+    config_base_dir: Path,
     timeout_seconds: int | None = None,
     max_turns: int | None = None,
+    request_variables: dict[str, str] | None = None,
 ) -> ClaudeAgentOptions:
     """
-    Create ClaudeAgentOptions for the coordinator.
-
-    Architecture:
-    - Coordinator uses Task tool to delegate to subagents
-    - Two MCP servers configured: kubernetes_wc and kubernetes_mc
-    - Each subagent (via AgentDefinition) is restricted to its own MCP tools
-    - Coordinator itself has NO MCP access (allowed_tools=["Task"] only)
+    Create ClaudeAgentOptions for a configured agent.
 
     Args:
-        timeout_seconds: Maximum time for investigation (used for HTTP timeouts
-                        and logging, not passed to SDK)
-        max_turns: Maximum conversation turns (default from config)
+        config: ShootConfig object
+        agent_name: Name of the agent to use
+        config_base_dir: Base directory for resolving paths
+        timeout_seconds: Optional timeout override
+        max_turns: Optional max turns override
+        request_variables: Variables from the request for prompt injection
+
+    Returns:
+        ClaudeAgentOptions configured for the specified agent
     """
-    settings = get_settings()
+    agent = config.get_agent(agent_name)
+
+    # Build prompt variables from config + request
+    prompt_vars: dict[str, str] = {}
+    for key, value in agent.prompt_variables.items():
+        prompt_vars[key] = value
+    if request_variables:
+        # Only include allowed request variables
+        for key in agent.request_variables:
+            if key in request_variables:
+                prompt_vars[key] = request_variables[key]
+
+    # Load system prompt
+    system_prompt = get_prompt_with_variables(
+        config=config,
+        base_dir=config_base_dir,
+        prompt_file=agent.system_prompt_file,
+        variables=prompt_vars,
+    )
+
+    # Build MCP servers
+    mcp_servers = build_mcp_servers_from_config(config, agent_name)
+
+    # Build agent definitions
+    agents = build_agent_definitions_from_config(config, agent_name, config_base_dir)
+
+    # Resolve model and limits
+    model = config.resolve_model(agent.model, is_orchestrator=True)
+    resolved_max_turns = max_turns or config.resolve_max_turns(
+        agent.max_turns, is_investigation=True
+    )
+
+    # Build allowed_tools: configured tools + MCP tools for direct access
+    allowed_tools = list(agent.allowed_tools)
+    mcp_tools = get_tools_for_agent(config, agent_name)
+    allowed_tools.extend(mcp_tools)
 
     return ClaudeAgentOptions(
-        system_prompt=get_coordinator_prompt(),
-        model=settings.coordinator_model,
-        # Configure both MCP servers with distinct names
-        # Tool isolation is enforced via AgentDefinition.tools
-        mcp_servers={
-            "kubernetes_wc": get_wc_mcp_config(),  # type: ignore[dict-item]
-            "kubernetes_mc": get_mc_mcp_config(),  # type: ignore[dict-item]
-        },
-        # Coordinator can ONLY delegate via Task tool
-        # No direct MCP access - enforces hierarchical pattern
-        allowed_tools=["Task"],
-        # Define collector subagents
-        agents=create_agent_definitions(),
-        # Bypass permission prompts for automated execution
+        system_prompt=system_prompt,
+        model=model,
+        mcp_servers=mcp_servers,  # type: ignore[arg-type]
+        allowed_tools=allowed_tools,
+        agents=agents,
         permission_mode="bypassPermissions",
-        # Turn limits to prevent runaway investigations
-        max_turns=max_turns or settings.max_turns,
+        max_turns=resolved_max_turns,
+    )
+
+
+def get_coordinator_options(
+    agent_name: str,
+    timeout_seconds: int | None = None,
+    max_turns: int | None = None,
+    request_variables: dict[str, str] | None = None,
+) -> ClaudeAgentOptions:
+    """
+    Get ClaudeAgentOptions from the configuration file.
+
+    Args:
+        agent_name: Name of agent to use (required)
+        timeout_seconds: Optional timeout override
+        max_turns: Optional max turns override
+        request_variables: Variables from the request for prompt injection
+
+    Returns:
+        ClaudeAgentOptions for the coordinator
+
+    Raises:
+        ValueError: If SHOOT_CONFIG is not set, agent not found, or config is invalid
+    """
+    config = get_config()
+
+    if config is None:
+        raise ValueError(
+            "SHOOT_CONFIG environment variable not set. "
+            "Configuration file is required to run Shoot."
+        )
+
+    if agent_name not in config.agents:
+        available = list(config.agents.keys())
+        raise ValueError(f"Agent '{agent_name}' not found. Available: {available}")
+
+    config_base_dir = get_config_base_dir()
+    if config_base_dir is None:
+        raise ValueError("Config base directory not found")
+
+    return create_coordinator_options_from_config(
+        config=config,
+        agent_name=agent_name,
+        config_base_dir=config_base_dir,
+        timeout_seconds=timeout_seconds,
+        max_turns=max_turns,
+        request_variables=request_variables,
     )
 
 
 async def run_coordinator(  # noqa: C901
     query_text: str,
+    agent_name: str,
     timeout_seconds: int | None = None,
     max_turns: int | None = None,
+    request_variables: dict[str, str] | None = None,
 ) -> InvestigationResult:
     """
-    Run the coordinator agent to investigate a Kubernetes issue.
+    Run the agent to investigate a Kubernetes issue.
 
     Uses ClaudeSDKClient for a single query/response cycle.
     The coordinator delegates to collector subagents via the Task tool.
 
     Args:
         query_text: High-level failure description (e.g., "Deployment not ready")
+        agent_name: Name of agent to use (required)
         timeout_seconds: Optional timeout override
         max_turns: Optional max turns override
+        request_variables: Variables from the request for prompt injection
 
     Returns:
         InvestigationResult with diagnostic report and usage metrics
@@ -114,11 +197,17 @@ async def run_coordinator(  # noqa: C901
         "coordinator.investigate",
         {
             "query": query_text[:200],
+            "agent": agent_name or "default",
             "timeout_seconds": timeout_seconds or settings.timeout_seconds,
             "max_turns": max_turns or settings.max_turns,
         },
     ) as _span:  # noqa: F841
-        options = create_coordinator_options(timeout_seconds, max_turns)
+        options = get_coordinator_options(
+            agent_name=agent_name,
+            timeout_seconds=timeout_seconds,
+            max_turns=max_turns,
+            request_variables=request_variables,
+        )
 
         result_text = ""
         debug_messages: list[Any] = []
@@ -145,7 +234,7 @@ async def run_coordinator(  # noqa: C901
             turn_count = 0
             async for message in client.receive_response():
                 # Log all message types to debug
-                logger.info(f"Received message type: {type(message).__name__}")
+                logger.debug(f"Received message type: {type(message).__name__}")
 
                 if isinstance(message, AssistantMessage):
                     turn_count += 1
@@ -233,19 +322,23 @@ async def run_coordinator(  # noqa: C901
 
 async def run_coordinator_streaming(
     query_text: str,
+    agent_name: str,
     timeout_seconds: int | None = None,
     max_turns: int | None = None,
+    request_variables: dict[str, str] | None = None,
 ) -> AsyncGenerator[str, None]:
     """
-    Run the coordinator agent with streaming response.
+    Run the agent with streaming response.
 
     Yields text chunks as they are received, providing real-time feedback
     during long investigations.
 
     Args:
         query_text: High-level failure description
+        agent_name: Name of agent to use (required)
         timeout_seconds: Optional timeout override
         max_turns: Optional max turns override
+        request_variables: Variables from the request for prompt injection
 
     Yields:
         Text chunks as they are generated
@@ -254,10 +347,16 @@ async def run_coordinator_streaming(
         "coordinator.investigate.streaming",
         {
             "query": query_text[:200],
+            "agent": agent_name or "default",
             "streaming": True,
         },
     ) as _span:  # noqa: F841
-        options = create_coordinator_options(timeout_seconds, max_turns)
+        options = get_coordinator_options(
+            agent_name=agent_name,
+            timeout_seconds=timeout_seconds,
+            max_turns=max_turns,
+            request_variables=request_variables,
+        )
 
         logger.info(f"Starting streaming investigation: {query_text[:100]}...")
         add_event(
@@ -301,10 +400,39 @@ def get_structured_report(result_text: str) -> DiagnosticReport | None:
 
 
 def is_coordinator_ready() -> bool:
-    """Check if the coordinator can be created."""
+    """
+    Check if the coordinator can be created.
+
+    Validates that the configuration is loaded and at least one agent exists.
+    """
     try:
-        create_coordinator_options()
+        config = get_config()
+        if config is None:
+            logger.error("Coordinator not ready: SHOOT_CONFIG not set")
+            return False
+        if not config.agents:
+            logger.error("Coordinator not ready: No agents defined")
+            return False
+        # Try to create options for first agent to validate config
+        first_agent = list(config.agents.keys())[0]
+        get_coordinator_options(agent_name=first_agent)
         return True
     except Exception as e:
         logger.error(f"Coordinator not ready: {e}")
         return False
+
+
+def get_available_agents() -> list[str]:
+    """
+    Get list of available agent names from configuration.
+
+    Returns:
+        List of agent names defined in the configuration
+
+    Raises:
+        ValueError: If SHOOT_CONFIG is not set
+    """
+    config = get_config()
+    if config is None:
+        raise ValueError("SHOOT_CONFIG environment variable not set")
+    return list(config.agents.keys())

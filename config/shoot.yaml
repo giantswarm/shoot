@@ -42,7 +42,6 @@ mcp_servers:
     args: ["serve", "--non-destructive"]
     env:
       KUBECONFIG: ${MC_KUBECONFIG:-}
-    in_cluster_fallback: true
     tools:
       - get
       - list

@@ -174,3 +174,9 @@ local-query: ## Send a test query to the local server. Usage: make -f Makefile.l
 		jq -r '.metrics.breakdown | to_entries[] | "  \(.key):\n    Cost: $$\(.value.total_cost_usd // 0)\n    Input: \(.value.usage.input_tokens // 0), Output: \(.value.usage.output_tokens // 0)"' $$tmpfile; \
 	fi; \
 	rm -f $$tmpfile
+
+.PHONY: local-query-stream
+local-query-stream: ## Send a streaming query to the local server. Usage: make -f Makefile.local.mk local-query-stream [Q="your query"] [A="assistant_name"]
+	@curl -sN http://localhost:8000/stream \
+		-H "Content-Type: application/json" \
+		-d '{"query": "$(if $(Q),$(Q),List all namespaces in the workload cluster)", "agent": "$(if $(A),$(A),kubernetes_debugger)"}'

@@ -19,7 +19,7 @@ A configurable multi-agent AI system built on the [Claude Agent SDK](https://git
                                     ▼
  ┌─────────────────────────────────────────────────────────────────────────────┐
 ┌─────────────────────────────────────────────────────────────────────────────┐|
-│                         Coordinator Agent                                   │|
+│                              Agent                                          │|
 │                   (Orchestrates investigation)                              │|
 │                                                                             │|
 │   • Receives queries from API                                               │|
@@ -35,13 +35,6 @@ A configurable multi-agent AI system built on the [Claude Agent SDK](https://git
 │                              │         │                              │
 │  • Gathers data from MCP     │         │  • Gathers data from MCP     │
 │  • Returns findings          │         │  • Returns findings          │
-└──────────────────────────────┘         └──────────────────────────────┘
-              │                                           │
-              ▼                                           ▼
-┌──────────────────────────────┐         ┌──────────────────────────────┐
-│       MCP Server A           │         │       MCP Server B           │
-│   (kubernetes, backstage,    │         │   (kubernetes, backstage,    │
-│    or any MCP server)        │         │    or any MCP server)        │
 └──────────────────────────────┘         └──────────────────────────────┘
 ```
 

@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class DiagnosticReport(BaseModel):
     """
-    Structured diagnostic report from the coordinator agent.
+    Structured diagnostic report from the agent.
 
     This schema enforces the output format defined in the coordinator prompt,
     ensuring consistent, actionable reports.
@@ -57,7 +57,7 @@ class DiagnosticReport(BaseModel):
 DIAGNOSTIC_REPORT_SCHEMA: dict[str, Any] = {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "DiagnosticReport",
-    "description": "Structured diagnostic report from the Shoot coordinator agent",
+    "description": "Structured diagnostic report from the Shoot agent",
     "type": "object",
     "properties": {
         "failure_signal": {

@@ -23,7 +23,7 @@ class DefaultsModels(BaseModel):
 
     orchestrator: str = Field(
         default="claude-sonnet-4-5-20250514",
-        description="Default model for orchestrator/coordinator agents",
+        description="Default model for orchestrator agents",
     )
     collector: str = Field(
         default="claude-3-5-haiku-20241022",

@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     coordinator_model: str = Field(
         default="claude-sonnet-4-5-20250929",
         validation_alias="ANTHROPIC_COORDINATOR_MODEL",
-        description="Model for coordinator agent (reasoning/orchestration)",
+        description="Model for agent (reasoning/orchestration)",
     )
     collector_model: str = Field(
         default="claude-3-5-haiku-20241022",

@@ -5,7 +5,7 @@ This FastAPI service provides an HTTP interface to the Shoot multi-agent
 Kubernetes debugging system.
 
 Architecture:
-- Coordinator agent (Claude Sonnet) orchestrates investigation
+- Agent (Claude Sonnet) orchestrates investigation
 - Subagents gather data from configured MCP servers
 - Strict separation: each subagent only accesses its own MCP servers
 

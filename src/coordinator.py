@@ -1,5 +1,5 @@
 """
-Coordinator agent for the multi-agent Kubernetes debugging system.
+Agent for the multi-agent Kubernetes debugging system.
 
 This module implements the coordinator following the pattern from:
 https://github.com/anthropics/claude-agent-sdk-demos/blob/main/research-agent/
@@ -176,7 +176,7 @@ async def run_coordinator(  # noqa: C901
     request_variables: dict[str, str] | None = None,
 ) -> InvestigationResult:
     """
-    Run the coordinator agent to investigate a Kubernetes issue.
+    Run the agent to investigate a Kubernetes issue.
 
     Uses ClaudeSDKClient for a single query/response cycle.
     The coordinator delegates to collector subagents via the Task tool.
@@ -328,7 +328,7 @@ async def run_coordinator_streaming(
     request_variables: dict[str, str] | None = None,
 ) -> AsyncGenerator[str, None]:
     """
-    Run the coordinator agent with streaming response.
+    Run the agent with streaming response.
 
     Yields text chunks as they are received, providing real-time feedback
     during long investigations.

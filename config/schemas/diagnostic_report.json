@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "DiagnosticReport",
-  "description": "Human-friendly diagnostic report from the Shoot coordinator agent",
+  "description": "Human-friendly diagnostic report from the Shoot agent",
   "type": "object",
   "properties": {
     "failure_signal": {

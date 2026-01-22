@@ -142,14 +142,14 @@ local-run: local-deps ## Run locally with uvicorn. Usage: make -f Makefile.local
 		MCP_KUBERNETES_PATH=$${MCP_KUBERNETES_PATH:-$(PWD)/$(LOCAL_CONFIG_DIR)/mcp-kubernetes} \
 		SHOOT_CONFIG=$$CONFIG_PATH \
 		PYTHONPATH=$(PWD)/src \
-		uv run uvicorn src.main:app --reload --port 8000
+		uv run uvicorn src.main:app --reload --port 8000 --log-level debug
 
 .PHONY: local-query
 local-query: ## Send a test query to the local server. Usage: make -f Makefile.local.mk local-query [Q="your query"] [A="assistant_name"]
 	@tmpfile=$$(mktemp); \
 	curl -s http://localhost:8000/ \
 		-H "Content-Type: application/json" \
-		-d '{"query": "$(if $(Q),$(Q),List all namespaces in the workload cluster)", "assistant": "$(if $(A),$(A),kubernetes_debugger)"}' \
+		-d '{"query": "$(if $(Q),$(Q),List all namespaces in the workload cluster)", "agent": "$(if $(A),$(A),kubernetes_debugger)"}' \
 		> $$tmpfile; \
 	jq -r '.result' $$tmpfile; \
 	echo; \

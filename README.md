@@ -17,14 +17,15 @@ A configurable multi-agent AI system built on the [Claude Agent SDK](https://git
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         Coordinator Agent                                   │
-│                   (Orchestrates investigation)                              │
-│                                                                             │
-│   • Receives queries from API                                               │
-│   • Plans investigation strategy                                            │
-│   • Delegates to subagents via Task tool                                    │
-│   • Synthesizes findings into reports                                       │
+ ┌─────────────────────────────────────────────────────────────────────────────┐
+┌─────────────────────────────────────────────────────────────────────────────┐|
+│                         Coordinator Agent                                   │|
+│                   (Orchestrates investigation)                              │|
+│                                                                             │|
+│   • Receives queries from API                                               │|
+│   • Plans investigation strategy                                            │|
+│   • Delegates to subagents via Task tool                                    │|
+│   • Synthesizes findings into reports                                       │┘
 └─────────────────────────────────────────────────────────────────────────────┘
                           │                   │
               ┌───────────┘                   └───────────┐
